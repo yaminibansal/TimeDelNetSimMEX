@@ -1,0 +1,8 @@
+D:\Users\acer\Desktop\Acads\SRE\Neuron Simulation Data\TimeDelNetSim\x64\Release
+"C:\Program Files\MATLAB\R2013a\bin\win64\MATLAB.exe" -nodisplay -nosplash -nodesktop -r "run('D:\Users\acer\Desktop\Acads\SRE\Neuron Simulation Data\TimeDelNetSim\x64\Release\NeuronSimMEX.m');"
+D:\Users\acer\Desktop\Acads\SRE\Neuron Simulation Data\TimeDelNetSim\x64\Release\
+/export:mexFunction 
+.*? = (.*?)[ ]*\r\n
+1127155795
+1571909636
+1.394580627605255

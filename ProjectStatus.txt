@@ -1,0 +1,9 @@
+Basic Mex EXE and Mexw64
+
+FileHandling in EXE is basic only VCF and SFS allowed (corresponding to StorageStepSize = 0 or otherwise)
+
+Core processing uses same code for both EXE and mexw64 versions.
+
+In order to be able to build this file, It is required that the variable MATLAB_ROOT is defined to the path of the matlab root.
+
+Also, the library paths of tbb and matlab have to be added to the Path Environment Variable
