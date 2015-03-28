@@ -175,8 +175,8 @@ void putOutputToFile(char* FileOut, InputArgs &InputArgList, StateVarsOut &State
 	fstream fout;
 	fout.open(FileOut, ios_base::out | ios_base::binary);
 
-	int N = InputArgList.Neurons.size();
-	int M = InputArgList.Network.size();
+	size_t N = InputArgList.Neurons.size();
+	size_t M = InputArgList.Network.size();
 	int i; // GLV
 	char tempoutput; // temp char to convert from int to char;
 
@@ -202,7 +202,7 @@ void putOutputToFile(char* FileOut, InputArgs &InputArgList, StateVarsOut &State
 		fout.write((char*)&(tempoutput), 1);
 	}
 
-	int timeDimensionLen, NoofSpikeQs;
+	size_t timeDimensionLen, NoofSpikeQs;
 	timeDimensionLen = StateVarsList.VOut.nrows();
 	NoofSpikeQs = (InputArgList.StorageStepSize) ? StateVarsList.SpikeQueueOut.size() : 1;
 
@@ -220,7 +220,7 @@ void putOutputToFile(char* FileOut, InputArgs &InputArgList, StateVarsOut &State
 		for (i = 0; i < NoofSpikeQs; ++i){
 			fout.write((char*)&StateVarsList.CurrentQIndexOut[i], sizeof(int));
 			for (int j = 0; j < InputArgList.onemsbyTstep * InputArgList.DelayRange; ++j){
-				int CurrSubQSize = StateVarsList.SpikeQueueOut[i][j].size();
+				size_t CurrSubQSize = StateVarsList.SpikeQueueOut[i][j].size();
 				fout.write((char*)&CurrSubQSize, sizeof(int));
 				fout.write((char*)&StateVarsList.SpikeQueueOut[i][j][0], sizeof(int)*CurrSubQSize);
 			}
@@ -235,7 +235,7 @@ void putOutputToFile(char* FileOut, InputArgs &InputArgList, StateVarsOut &State
 	else{
 		fout.write((char*)&FinalStateList.CurrentQIndex, sizeof(int));
 		for (int j = 0; j < InputArgList.onemsbyTstep * InputArgList.DelayRange; ++j){
-			int CurrSubQSize = FinalStateList.SpikeQueue[j].size();
+			size_t CurrSubQSize = FinalStateList.SpikeQueue[j].size();
 			fout.write((char*)&CurrSubQSize, sizeof(int));
 			fout.write((char*)&FinalStateList.SpikeQueue[j][0], sizeof(int)*CurrSubQSize);
 		}
@@ -288,7 +288,7 @@ template<typename T> mxArray * assignmxArray(MexVector<MexVector<T> > &VectorOut
 	if (VectorOut.size()){
 		ReturnPointer = mxCreateCellMatrix(VectorOut.size(), 1);
 		
-		int VectVectSize = VectorOut.size();
+		size_t VectVectSize = VectorOut.size();
 		for (int i = 0; i < VectVectSize; ++i){
 			mxSetCell(ReturnPointer, i, assignmxArray(VectorOut[i], ClassID));
 		}

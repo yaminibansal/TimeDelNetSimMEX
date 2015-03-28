@@ -1,5 +1,9 @@
 #ifndef MEXMEM_HPP
 #define MEXMEM_HPP
+#include <xutility>
+#include <matrix.h>
+#include <type_traits>
+
 
 struct ExOps{
 	enum{
@@ -9,78 +13,84 @@ struct ExOps{
 	};
 };
 
-
-template<class T>
+template<typename T>
 class MexVector{
-	int NumOfElems, Capacity;
 	bool isCurrentMemExternal;
-	T* Array;
-
+	T* Array_Beg;
+	T* Array_Last;	// Note Not Array_End as it is not representative
+					// of the capacity
+	T* Array_End;	// Note Array End is true end of allocated array
 public:
-	inline MexVector() : NumOfElems(0), Capacity(0), isCurrentMemExternal(false), Array(NULL){};
-	inline explicit MexVector(int Size){
+	typedef T* iterator;
+
+	inline MexVector() : Array_End(NULL), isCurrentMemExternal(false), Array_Beg(NULL), Array_Last(NULL){};
+	inline explicit MexVector(size_t Size){
 		if (Size > 0){
-			Array = reinterpret_cast<T*>(mxCalloc(Size, sizeof(T)));
-			if (Array == NULL)     // Full Memory exception
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(Size, sizeof(T)));
+			if (Array_Beg == NULL)     // Full Memory exception
 				throw ExOps::EXCEPTION_MEM_FULL;
-			for (int i = 0; i < Size; ++i)
-				new (Array + i) T;	// Constructing Default Objects
+			for (size_t i = 0; i < Size; ++i)
+				new (Array_Beg + i) T;	// Constructing Default Objects
 		}
 		else{
-			Array = NULL;
+			Array_Beg = NULL;
 		}
-		NumOfElems = Size;
-		Capacity = Size;
+		Array_Last = Array_Beg + Size;
+		Array_End = Array_Beg + Size;
 		isCurrentMemExternal = false;
 	}
 	inline MexVector(const MexVector<T> &M){
-		if (M.NumOfElems > 0){
-			Array = reinterpret_cast<T*>(mxCalloc(M.NumOfElems, sizeof(T)));
-			if (Array != NULL)
-				for (int i = 0; i < M.NumOfElems; ++i)
-					new (Array + i) T(M.Array[i]);
+		size_t Size = M.size();
+		if (Size > 0){
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(Size, sizeof(T)));
+			if (Array_Beg != NULL)
+				for (size_t i = 0; i < Size; ++i)
+					new (Array_Beg + i) T(M.Array_Beg[i]);
 			else{	// Checking for memory full shit
 				throw ExOps::EXCEPTION_MEM_FULL;
 			}
 		}
 		else{
-			Array = NULL;
+			Array_Beg = NULL;
 		}
-		NumOfElems = M.NumOfElems;
-		Capacity = M.NumOfElems;
+		Array_Last = Array_Beg + Size;
+		Array_End = Array_Beg + Size;
 		isCurrentMemExternal = false;
 	}
 	inline MexVector(MexVector<T> &&M){
 		isCurrentMemExternal = M.isCurrentMemExternal;
-		NumOfElems = M.NumOfElems;
-		Capacity = M.Capacity;
-		Array = M.Array;
-		if (!(M.Array == NULL)){
+		Array_Beg = M.Array_Beg;
+		Array_Last = M.Array_Last;
+		Array_End = M.Array_End;
+		if (!(M.Array_Beg == NULL)){
 			M.isCurrentMemExternal = true;
 		}
 	}
-	inline explicit MexVector(int Size, const T &Elem){
+	inline explicit MexVector(size_t Size, const T &Elem){
 		if (Size > 0){
-			Array = reinterpret_cast<T*>(mxCalloc(Size, sizeof(T)));
-			if (Array == NULL){
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(Size, sizeof(T)));
+			if (Array_Beg == NULL){
 				throw ExOps::EXCEPTION_MEM_FULL;
 			}
 		}
 		else{
-			Array = NULL;
+			Array_Beg = NULL;
 		}
-		NumOfElems = Size;
-		Capacity = Size;
+		Array_Last = Array_Beg + Size;
+		Array_End = Array_Beg + Size;
 		isCurrentMemExternal = false;
-		for (int i = 0; i < NumOfElems; ++i)
-			new (Array + i) T(Elem);
+		for (T* i = Array_Beg; i < Array_Last; ++i)
+			new (i) T(Elem);
 	}
-	inline explicit MexVector(int Size, T* Array_, bool SelfManage = 1) :
-		Array(Size ? Array_ : NULL), NumOfElems(Size), Capacity(Size), isCurrentMemExternal(Size ? !SelfManage : false){}
+	inline explicit MexVector(size_t Size, T* Array_, bool SelfManage = 1) :
+		Array_Beg(Size ? Array_ : NULL), 
+		Array_Last(Array_ + Size), 
+		Array_End(Array_ + Size), 
+		isCurrentMemExternal(Size ? !SelfManage : false){}
 
 	inline ~MexVector(){
-		if (!isCurrentMemExternal && Array != NULL){
-			mxFree(Array);
+		if (!isCurrentMemExternal && Array_Beg != NULL){
+			mxFree(Array_Beg);
 		}
 	}
 	inline void operator = (const MexVector<T> &M){
@@ -92,8 +102,8 @@ public:
 	inline void operator = (const MexVector<T> &M) const{
 		this->assign(M);
 	}
-	inline T& operator[] (int Index) const{
-		return Array[Index];
+	inline T& operator[] (size_t Index) const{
+		return Array_Beg[Index];
 	}
 
 	// If Ever this operation is called, no funcs except will work (Vector will point to empty shit) unless 
@@ -103,93 +113,130 @@ public:
 			return NULL;
 		else{
 			isCurrentMemExternal = false;
-			T* temp = Array;
-			Array = NULL;
-			NumOfElems = 0;
-			Capacity = 0;
+			T* temp = Array_Beg;
+			Array_Beg = NULL;
+			Array_Last = NULL;
+			Array_End = NULL;
 			return temp;
 		}
 	}
 	inline void assign(const MexVector<T> &M){
-		if (M.NumOfElems > this->Capacity && !isCurrentMemExternal){
-			if (Array != NULL)
-				mxFree(Array);
-			Array = reinterpret_cast<T*>(mxCalloc(M.NumOfElems, sizeof(T)));
-			if (Array == NULL)
+		size_t ExtSize = M.size();
+		size_t currCapacity = this->capacity();
+		if (ExtSize > currCapacity && !isCurrentMemExternal){
+			if (Array_Beg != NULL){
+				resize(0);		// this ensures destruction of all elements
+				trim();
+			}
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(ExtSize, sizeof(T)));
+			if (Array_Beg == NULL)
 				throw ExOps::EXCEPTION_MEM_FULL;
-			for (int i = 0; i < M.NumOfElems; ++i)
-				Array[i] = M.Array[i];
-			NumOfElems = M.NumOfElems;
-			Capacity = M.NumOfElems;
+			for (size_t i = 0; i < ExtSize; ++i)
+				new (Array_Beg+i) T(M.Array_Beg[i]);	// needs to be copy constructed
+			Array_Last = Array_Beg + ExtSize;
+			Array_End = Array_Beg + ExtSize;
 		}
-		else if (M.NumOfElems <= this->Capacity && !isCurrentMemExternal){
-			for (int i = 0; i < M.NumOfElems; ++i)
-				Array[i] = M.Array[i];
-			NumOfElems = M.NumOfElems;
+		else if (ExtSize <= currCapacity && !isCurrentMemExternal){
+			for (size_t i = 0; i < ExtSize; ++i)
+				Array_Beg[i] = M.Array_Beg[i];			// operator= needs to be defined
+														// else standard shallow copy
+			Array_Last = Array_Beg + ExtSize;
 		}
-		else if (M.NumOfElems == this->NumOfElems){
-			for (int i = 0; i < M.NumOfElems; ++i)
-				Array[i] = M.Array[i];
+		else if (ExtSize == this->size()){
+			for (size_t i = 0; i < ExtSize; ++i)
+				Array_Beg[i] = M.Array_Beg[i];
 		}
 		else{
-			throw ExOps::EXCEPTION_EXTMEM_MOD;	// Attempted resizing or reallocation of Array holding External Memory
+			throw ExOps::EXCEPTION_EXTMEM_MOD;	// Attempted resizing or reallocation of Array_Beg holding External Memory
 		}
 	}
 	inline void assign(MexVector<T> &&M){
-		if (!isCurrentMemExternal && Array != NULL){
-			mxFree(Array);
+		if (!isCurrentMemExternal && Array_Beg != NULL){
+			mxFree(Array_Beg);
 		}
 		isCurrentMemExternal = M.isCurrentMemExternal;
-		NumOfElems = M.NumOfElems;
-		Capacity = M.Capacity;
-		Array = M.Array;
-		if (Array != NULL){
+		Array_Beg = M.Array_Beg;
+		Array_Last = M.Array_Last;
+		Array_End = M.Array_End;
+		if (Array_Beg != NULL){
 			M.isCurrentMemExternal = true;
 		}
 	}
 	inline void assign(const MexVector<T> &M) const{
-		if (M.NumOfElems == this->NumOfElems){
-			for (int i = 0; i < M.NumOfElems; ++i)
-				Array[i] = M.Array[i];
+		size_t ExtSize = M.size();
+		if (ExtSize == this->size()){
+			for (size_t i = 0; i < ExtSize; ++i)
+				Array_Beg[i] = M.Array_Beg[i];
 		}
 		else{
-			throw ExOps::EXCEPTION_CONST_MOD;	// Attempted resizing or reallocation or reassignment of const Array
+			throw ExOps::EXCEPTION_CONST_MOD;	// Attempted resizing or reallocation or reassignment of const Array_Beg
 		}
 	}
-	inline void assign(int Size, T* Array_, bool SelfManage = 1){
-		NumOfElems = Size;
-		Capacity = Size;
-		if (!isCurrentMemExternal && Array != NULL){
-			mxFree(Array);
+	inline void assign(size_t Size, T* Array_, bool SelfManage = 1){
+		if (!isCurrentMemExternal && Array_Beg != NULL){
+			mxFree(Array_Beg);
 		}
 		if (Size > 0){
 			isCurrentMemExternal = !SelfManage;
-			Array = Array_;
+			Array_Beg = Array_;
 		}
 		else{
 			isCurrentMemExternal = false;
-			Array = NULL;
+			Array_Beg = NULL;
+		}
+		Array_Last = Array_Beg + Size;
+		Array_End = Array_Beg + Size;
+	}
+	inline void push_back(const T &Val){
+		if (Array_Last != Array_End){
+			*Array_Last = Val;
+			++Array_Last;
+		}
+		else {
+			size_t Capacity = this->capacity();
+			int Exp = 0;
+			Capacity = Capacity ? Capacity + (Capacity >> 1) : 4;
+			reserve(Capacity);
+			*Array_Last = Val;
+			++Array_Last;
 		}
 	}
-	inline void copyArray(int Position, T* ArrBegin, int NumElems) const{
-		if (Position + NumElems > NumOfElems){
+	inline void push_size(size_t Increment){
+		if (Array_Last + Increment> Array_End){
+			size_t CurrCapacity = this->capacity();
+			size_t CurrSize = this->size();
+			CurrCapacity = CurrCapacity ? CurrCapacity : 4;
+			while (CurrCapacity <= CurrSize + Increment){
+				CurrCapacity += (CurrCapacity >> 1);
+			}
+			reserve(CurrCapacity);
+		}
+		Array_Last += Increment;
+	}
+	inline void copyArray(size_t Position, T* ArrBegin, size_t NumElems) const{
+		if (Position + NumElems > this->size()){
 			throw ExOps::EXCEPTION_CONST_MOD;
 		}
 		else{
-			for (int i = 0; i<NumElems; ++i)
-				Array[i + Position] = ArrBegin[i];
+			for (size_t i = 0; i<NumElems; ++i)
+				Array_Beg[i + Position] = ArrBegin[i];
 		}
 	}
-	inline void reserve(int Cap){
-		if (!isCurrentMemExternal && Cap > Capacity){
+	inline void reserve(size_t Cap){
+		size_t currCapacity = this->capacity();
+		if (!isCurrentMemExternal && Cap > currCapacity){
 			T* Temp;
-			if (Array != NULL)
-				Temp = reinterpret_cast<T*>(mxRealloc(Array, Cap*sizeof(T)));
+			size_t prevSize = this->size();
+			if (Array_Beg != NULL)
+				Temp = reinterpret_cast<T*>(mxRealloc(Array_Beg, Cap*sizeof(T)));
 			else
 				Temp = reinterpret_cast<T*>(mxCalloc(Cap, sizeof(T)));
 			if (Temp != NULL){
-				Array = Temp;
-				Capacity = Cap;
+				Array_Beg = Temp;
+				for (size_t i = currCapacity; i < Cap; ++i)
+					new (Array_Beg + i) T;
+				Array_Last = Array_Beg + prevSize;
+				Array_End = Array_Beg + Cap;
 			}
 			else
 				throw ExOps::EXCEPTION_MEM_FULL;
@@ -197,54 +244,68 @@ public:
 		else if (isCurrentMemExternal)
 			throw ExOps::EXCEPTION_EXTMEM_MOD;	//Attempted reallocation of external memory
 	}
-	inline void resize(int NewSize){
-		if (NewSize > Capacity && !isCurrentMemExternal){
-			T* Temp;
-			if (Array != NULL)
-				Temp = reinterpret_cast<T*>(mxRealloc(Array, NewSize*sizeof(T)));
-			else
-				Temp = reinterpret_cast<T*>(mxCalloc(NewSize, sizeof(T)));
-			if (Temp != NULL){
-				Array = Temp;
-				Capacity = NewSize;
-			}
-			else
-				throw ExOps::EXCEPTION_MEM_FULL;
+	inline void resize(size_t NewSize) {
+		if (NewSize > this->capacity() && !isCurrentMemExternal){
+			reserve(NewSize);
 		}
 		else if (isCurrentMemExternal){
 			throw ExOps::EXCEPTION_EXTMEM_MOD;	//Attempted resizing of External memory
 		}
-		NumOfElems = NewSize;
+		Array_Last = Array_Beg + NewSize;
+	}
+	inline void resize(size_t NewSize, const T &Val){
+		size_t prevSize = this->size();
+		resize(NewSize);
+		T* End = Array_Beg + NewSize;
+		if (NewSize != 0)
+			for (T* j = Array_Beg + prevSize; j < End; ++j)
+				*j = Val;
+	}
+	inline void resize(size_t NewSize, T &&Val){
+		size_t prevSize = this->size();
+		resize(NewSize);
+		T* End = Array_Beg + NewSize;
+		if (NewSize != 0)
+			for (T* j = Array_Beg + prevSize; j < End; ++j)
+				*j = std::move(Val);
 	}
 	inline void sharewith(MexVector<T> &M) const{
-		if (!M.isCurrentMemExternal && M.Array != NULL)
-			mxFree(M.Array);
-		if (Capacity > 0){
-			M.NumOfElems = NumOfElems;
-			M.Capacity = Capacity;
-			M.Array = Array;
+		if (!M.isCurrentMemExternal && M.Array_Beg != NULL)
+			mxFree(M.Array_Beg);
+		if (Array_End){
+			M.Array_Beg = Array_Beg;
+			M.Array_Last = Array_Last;
+			M.Array_End = Array_End;
 			M.isCurrentMemExternal = true;
 		}
 		else{
-			M.NumOfElems = 0;
-			M.Capacity = 0;
-			M.Array = NULL;
+			M.Array_Beg = NULL;
+			M.Array_Last = NULL;
+			M.Array_End = NULL;
 			M.isCurrentMemExternal = false;
 		}
 	}
 	inline void trim(){
 		if (!isCurrentMemExternal){
-			if (NumOfElems > 0){
-				T* Temp = reinterpret_cast<T*>(mxRealloc(Array, NumOfElems*sizeof(T)));
+			size_t currSize = this->size();
+			if (currSize > 0){
+				// Run Destructors
+				if (!std::is_trivially_destructible<T>::value)
+					for (T* j = Array_Last; j < Array_End; ++j) {
+						j->~T();
+					}
+				
+				T* Temp = reinterpret_cast<T*>(mxRealloc(Array_Beg, currSize*sizeof(T)));
 				if (Temp != NULL)
-					Array = Temp;
+					Array_Beg = Temp;
 				else
 					throw ExOps::EXCEPTION_MEM_FULL;
 			}
 			else{
-				Array = NULL;
+				Array_Beg = NULL;
 			}
-			Capacity = NumOfElems;
+			Array_Last = Array_Beg + currSize;
+			Array_End = Array_Beg +  currSize;
 		}
 		else{
 			throw ExOps::EXCEPTION_EXTMEM_MOD;
@@ -252,48 +313,56 @@ public:
 	}
 	inline void clear(){
 		if (!isCurrentMemExternal)
-			NumOfElems = 0;
+			Array_Last = Array_Beg;
 		else
 			throw ExOps::EXCEPTION_EXTMEM_MOD; //Attempt to resize External memory
 	}
-	inline int size() const{
-		return NumOfElems;
+	inline iterator begin() const{
+		return Array_Beg;
 	}
-	inline int capacity() const{
-		return Capacity;
+	inline iterator end() const{
+		return Array_Last;
+	}
+	inline size_t size() const{
+		return Array_Last - Array_Beg;
+	}
+	inline size_t capacity() const{
+		return Array_End - Array_Beg;
 	}
 	inline bool ismemext() const{
 		return isCurrentMemExternal;
 	}
 	inline bool isempty() const{
-		return NumOfElems == 0;
+		return Array_Beg == Array_Last;
 	}
 	inline bool istrulyempty() const{
-		return Capacity == 0;
+		return Array_End == Array_Beg;
 	}
 };
 
 
 template<class T>
 class MexMatrix{
-	int NRows, NCols;
-	int Capacity;
+	size_t NRows, NCols;
+	size_t Capacity;
 	MexVector<T> RowReturnVector;
-	T* Array;
+	T* Array_Beg;
 	bool isCurrentMemExternal;
 
 public:
-	inline MexMatrix() : NRows(0), NCols(0), Capacity(0), isCurrentMemExternal(false), Array(NULL), RowReturnVector(){};
-	inline explicit MexMatrix(int NRows_, int NCols_) : RowReturnVector() {
+	typedef T* iterator;
+
+	inline MexMatrix() : NRows(0), NCols(0), Capacity(0), isCurrentMemExternal(false), Array_Beg(NULL), RowReturnVector(){};
+	inline explicit MexMatrix(size_t NRows_, size_t NCols_) : RowReturnVector() {
 		if (NRows_*NCols_ > 0){
-			Array = reinterpret_cast<T*>(mxCalloc(NRows_*NCols_, sizeof(T)));
-			if (Array == NULL)     // Full Memory exception
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(NRows_*NCols_, sizeof(T)));
+			if (Array_Beg == NULL)     // Full Memory exception
 				throw ExOps::EXCEPTION_MEM_FULL;
-			for (int i = 0; i < NRows_*NCols_; ++i)
-				new (Array + i) T;
+			for (size_t i = 0; i < NRows_*NCols_; ++i)
+				new (Array_Beg + i) T;
 		}
 		else{
-			Array = NULL;
+			Array_Beg = NULL;
 		}
 		NRows = NRows_;
 		NCols = NCols_;
@@ -301,19 +370,18 @@ public:
 		isCurrentMemExternal = false;
 	}
 	inline MexMatrix(const MexMatrix<T> &M) : RowReturnVector(){
-		int MNumElems = M.NRows * M.NCols;
+		size_t MNumElems = M.NRows * M.NCols;
 		if (MNumElems > 0){
-			Array = reinterpret_cast<T*>(mxCalloc(MNumElems, sizeof(T)));
-			if (Array != NULL)
-				for (int i = 0; i < MNumElems; ++i){
-				Array[i] = M.Array[i];
-				}
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(MNumElems, sizeof(T)));
+			if (Array_Beg != NULL)
+				for (size_t i = 0; i < MNumElems; ++i)
+					new (Array_Beg + i) T(M.Array_Beg[i]);
 			else{	// Checking for memory full shit
 				throw ExOps::EXCEPTION_MEM_FULL;
 			}
 		}
 		else{
-			Array = NULL;
+			Array_Beg = NULL;
 		}
 		NRows = M.NRows;
 		NCols = M.NCols;
@@ -325,41 +393,41 @@ public:
 		NRows = M.NRows;
 		NCols = M.NCols;
 		Capacity = M.Capacity;
-		Array = M.Array;
-		if (!(M.Array == NULL)){
+		Array_Beg = M.Array_Beg;
+		if (!(M.Array_Beg == NULL)){
 			M.isCurrentMemExternal = true;
 		}
 	}
-	inline explicit MexMatrix(int NRows_, int NCols_, const T &Elem) : RowReturnVector(){
-		int NumElems = NRows_*NCols_;
+	inline explicit MexMatrix(size_t NRows_, size_t NCols_, const T &Elem) : RowReturnVector(){
+		size_t NumElems = NRows_*NCols_;
 		if (NumElems > 0){
-			Array = reinterpret_cast<T*>(mxCalloc(NumElems, sizeof(T)));
-			if (Array == NULL){
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(NumElems, sizeof(T)));
+			if (Array_Beg == NULL){
 				throw ExOps::EXCEPTION_MEM_FULL;
 			}
 		}
 		else{
-			Array = NULL;
+			Array_Beg = NULL;
 		}
 
 		NRows = NRows_;
 		NCols = NCols_;
 		Capacity = NumElems;
 		isCurrentMemExternal = false;
-		for (int i = 0; i < NumElems; ++i){
-			Array[i] = Elem;
+		for (size_t i = 0; i < NumElems; ++i){
+			Array_Beg[i] = Elem;
 		}
 	}
-	inline MexMatrix(int NRows_, int NCols_, T* Array_, bool SelfManage = 1) : 
+	inline MexMatrix(size_t NRows_, size_t NCols_, T* Array_, bool SelfManage = 1) :
 		RowReturnVector(),
-		Array((NRows_*NCols_) ? Array_ : NULL),
+		Array_Beg((NRows_*NCols_) ? Array_ : NULL),
 		NRows(NRows_), NCols(NCols_),
 		Capacity(NRows_*NCols_),
 		isCurrentMemExternal((NRows_*NCols_) ? ~SelfManage : false){}
 
 	inline ~MexMatrix(){
-		if (!isCurrentMemExternal && Array != NULL){
-			mxFree(Array);
+		if (!isCurrentMemExternal && Array_Beg != NULL){
+			mxFree(Array_Beg);
 		}
 	}
 	inline void operator = (const MexMatrix<T> &M){
@@ -371,12 +439,12 @@ public:
 	inline void operator = (const MexMatrix<T> &M) const{
 		assign(M);
 	}
-	inline const MexVector<T>& operator[] (int Index) {
-		RowReturnVector.assign(NCols, Array + Index*NCols, false);
+	inline const MexVector<T>& operator[] (size_t Index) {
+		RowReturnVector.assign(NCols, Array_Beg + Index*NCols, false);
 		return  RowReturnVector;
 	}
-	inline T& operator()(int RowIndex, int ColIndex){
-		return *(Array + RowIndex*NCols + ColIndex);
+	inline T& operator()(size_t RowIndex, size_t ColIndex){
+		return *(Array_Beg + RowIndex*NCols + ColIndex);
 	}
 	// If Ever this operation is called, no funcs except will work (Vector will point to NULL) unless 
 	// the assign function is explicitly called to self manage another array.
@@ -385,8 +453,8 @@ public:
 			return NULL;
 		else{
 			isCurrentMemExternal = false;
-			T* temp = Array;
-			Array = NULL;
+			T* temp = Array_Beg;
+			Array_Beg = NULL;
 			NRows = 0;
 			NCols = 0;
 			Capacity = 0;
@@ -395,95 +463,102 @@ public:
 	}
 	inline void assign(const MexMatrix<T> &M){
 
-		int MNumElems = M.NRows * M.NCols;
+		size_t MNumElems = M.NRows * M.NCols;
 
 		if (MNumElems > this->Capacity && !isCurrentMemExternal){
-			if (Array != NULL)
-				mxFree(Array);
-			Array = reinterpret_cast<T*>(mxCalloc(MNumElems, sizeof(T)));
-			if (Array == NULL)
+			if (Array_Beg != NULL){
+				resize(0, 0);		// Ensure destruction of elements
+				trim();
+			}
+			Array_Beg = reinterpret_cast<T*>(mxCalloc(MNumElems, sizeof(T)));
+			if (Array_Beg == NULL)
 				throw ExOps::EXCEPTION_MEM_FULL;
-			for (int i = 0; i < MNumElems; ++i)
-				Array[i] = M.Array[i];
+			for (size_t i = 0; i < MNumElems; ++i)
+				new (Array_Beg+i) T(M.Array_Beg[i]);	// needs to be copy constructed
 			NRows = M.NRows;
 			NCols = M.NCols;
 			Capacity = MNumElems;
 		}
 		else if (MNumElems <= this->Capacity && !isCurrentMemExternal){
-			for (int i = 0; i < MNumElems; ++i)
-				Array[i] = M.Array[i];
+			for (size_t i = 0; i < MNumElems; ++i)
+				Array_Beg[i] = M.Array_Beg[i];
 			NRows = M.NRows;
 			NCols = M.NCols;
 		}
 		else if (MNumElems == this->NRows * this->NCols){
-			for (int i = 0; i < MNumElems; ++i)
-				Array[i] = M.Array[i];
+			for (size_t i = 0; i < MNumElems; ++i)
+				Array_Beg[i] = M.Array_Beg[i];
 			NRows = M.NRows;
 			NCols = M.NCols;
 		}
 		else{
-			throw ExOps::EXCEPTION_EXTMEM_MOD;	// Attempted resizing or reallocation of Array holding External Memory
+			throw ExOps::EXCEPTION_EXTMEM_MOD;	// Attempted resizing or reallocation of Array_Beg holding External Memory
 		}
 	}
 	inline void assign(MexMatrix<T> &&M){
-		if (!isCurrentMemExternal && Array != NULL){
-			mxFree(Array);
+		if (!isCurrentMemExternal && Array_Beg != NULL){
+			mxFree(Array_Beg);
 		}
 		isCurrentMemExternal = M.isCurrentMemExternal;
 		NRows = M.NRows;
 		NCols = M.NCols;
 		Capacity = M.Capacity;
-		Array = M.Array;
-		if (Array != NULL){
+		Array_Beg = M.Array_Beg;
+		if (Array_Beg != NULL){
 			M.isCurrentMemExternal = true;
 		}
 	}
 	inline void assign(const MexMatrix<T> &M) const{
-		int MNumElems = M.NRows * M.NCols;
+		size_t MNumElems = M.NRows * M.NCols;
 		if (M.NRows == NRows && M.NCols == NCols){
-			for (int i = 0; i < MNumElems; ++i)
-				Array[i] = M.Array[i];
+			for (size_t i = 0; i < MNumElems; ++i)
+				Array_Beg[i] = M.Array_Beg[i];
 		}
 		else{
 			throw ExOps::EXCEPTION_CONST_MOD;
 		}
 	}
-	inline void assign(int NRows_, int NCols_, T* Array_, bool SelfManage = 1){
+	inline void assign(size_t NRows_, size_t NCols_, T* Array_, bool SelfManage = 1){
 		NRows = NRows_;
 		NCols = NCols_;
 		Capacity = NRows_*NCols_;
-		if (!isCurrentMemExternal && Array != NULL){
-			mxFree(Array);
+		if (!isCurrentMemExternal && Array_Beg != NULL){
+			mxFree(Array_Beg);
 		}
 		if (Capacity > 0){
 			isCurrentMemExternal = !SelfManage;
-			Array = Array_;
+			Array_Beg = Array_;
 		}
 		else{
 			isCurrentMemExternal = false;
-			Array = NULL;
+			Array_Beg = NULL;
 		}
 	}
-	inline void copyArray(int RowPos, int ColPos, T* ArrBegin, int NumElems) const{
-		int Position = RowPos*NCols + ColPos;
+	inline void copyArray(size_t RowPos, size_t ColPos, T* ArrBegin, size_t NumElems) const{
+		size_t Position = RowPos*NCols + ColPos;
 		if (Position + NumElems > NRows*NCols){
 			throw ExOps::EXCEPTION_CONST_MOD;
 		}
 		else{
-			for (int i = 0; i<NumElems; ++i)
-				Array[i + Position] = ArrBegin[i];
+			for (size_t i = 0; i<NumElems; ++i)
+				Array_Beg[i + Position] = ArrBegin[i];
 		}
 	}
-	inline void reserve(int Cap){
+	inline void reserve(size_t Cap){
+		// this is a bit shitty as it basically deletes all previous values
 		if (!isCurrentMemExternal && Cap > Capacity){
 			T* temp;
-			if (Array != NULL){
-				mxFree(Array);
+			if (Array_Beg != NULL){
+				resize(0, 0);
+				trim();
 			}
 			temp = reinterpret_cast<T*>(mxCalloc(Cap, sizeof(T)));
 			if (temp != NULL){
-				Array = temp;
+				Array_Beg = temp;
 				Capacity = Cap;
+				for (int i = 0; i < Cap; ++i){
+					new (Array_Beg + i) T;	// Defult constructing memory locations.
+				}
 			}
 			else
 				throw ExOps::EXCEPTION_MEM_FULL; // Full memory
@@ -491,20 +566,10 @@ public:
 		else if (isCurrentMemExternal)
 			throw ExOps::EXCEPTION_EXTMEM_MOD;	//Attempted reallocation of external memory
 	}
-	inline void resize(int NewNRows, int NewNCols){
-		int NewSize = NewNRows * NewNCols;
+	inline void resize(size_t NewNRows, size_t NewNCols){
+		size_t NewSize = NewNRows * NewNCols;
 		if (NewSize > Capacity && !isCurrentMemExternal){
-			T* Temp;
-			if (Array != NULL){
-				mxFree(Array);
-			}
-			Temp = reinterpret_cast<T*>(mxCalloc(NewSize, sizeof(T)));
-			if (Temp != NULL){
-				Array = Temp;
-				Capacity = NewSize;
-			}
-			else
-				throw ExOps::EXCEPTION_MEM_FULL;
+			reserve(NewSize);
 		}
 		else if (isCurrentMemExternal){
 			throw ExOps::EXCEPTION_EXTMEM_MOD;	//Attempted resizing of External memory
@@ -512,17 +577,33 @@ public:
 		NRows = NewNRows;
 		NCols = NewNCols;
 	}
+	inline void resize(size_t NewNRows, size_t NewNCols, const T &Val){
+		size_t PrevSize = NRows * NCols;
+		size_t NewSize = NewNRows * NewNCols;
+		resize(NewNRows, NewNCols);
+		for (T *j = Array_Beg + PrevSize; j < Array_Beg + NewSize; ++j){
+			*j = Val;
+		}
+	}
+	inline void resize(size_t NewNRows, size_t NewNCols, T &&Val){
+		size_t PrevSize = NRows * NCols;
+		size_t NewSize = NewNRows * NewNCols;
+		resize(NewNRows, NewNCols);
+		for (T *j = Array_Beg + PrevSize; j < Array_Beg + NewSize; ++j){
+			*j = std::move(Val);
+		}
+	}
 	inline void trim(){
 		if (!isCurrentMemExternal){
 			if (NRows > 0){
-				T* Temp = reinterpret_cast<T*>(mxRealloc(Array, NRows*NCols*sizeof(T)));
+				T* Temp = reinterpret_cast<T*>(mxRealloc(Array_Beg, NRows*NCols*sizeof(T)));
 				if (Temp != NULL)
-					Array = Temp;
+					Array_Beg = Temp;
 				else
 					throw ExOps::EXCEPTION_MEM_FULL;
 			}
 			else{
-				Array = NULL;
+				Array_Beg = NULL;
 			}
 			Capacity = NRows*NCols;
 		}
@@ -531,20 +612,20 @@ public:
 		}
 	}
 	inline void sharewith(MexMatrix<T> &M) const{
-		if (!M.isCurrentMemExternal && M.Array != NULL)
-			mxFree(M.Array);
+		if (!M.isCurrentMemExternal && M.Array_Beg != NULL)
+			mxFree(M.Array_Beg);
 		if (Capacity > 0){
 			M.NRows = NRows;
 			M.NCols = NCols;
 			M.Capacity = Capacity;
-			M.Array = Array;
+			M.Array_Beg = Array_Beg;
 			M.isCurrentMemExternal = true;
 		}
 		else{
 			M.NRows = 0;
 			M.NCols = 0;
 			M.Capacity = 0;
-			M.Array = NULL;
+			M.Array_Beg = NULL;
 			M.isCurrentMemExternal = false;
 		}
 	}
@@ -554,13 +635,19 @@ public:
 		else
 			throw ExOps::EXCEPTION_EXTMEM_MOD; //Attempt to resize External memory
 	}
-	inline int nrows() const{
+	inline iterator begin() const{
+		return Array_Beg;
+	}
+	inline iterator end() const{
+		return Array_Beg + (NRows * NCols);
+	}
+	inline size_t nrows() const{
 		return NRows;
 	}
-	inline int ncols() const{
+	inline size_t ncols() const{
 		return NCols;
 	}
-	inline int capacity() const{
+	inline size_t capacity() const{
 		return Capacity;
 	}
 	inline bool ismemext() const{

@@ -18,7 +18,7 @@ void CountingSort(int N, MexVector<Synapse> &Network, MexVector<int> &indirectio
 {
 	MexVector<int> CumulativeCountStart(N,0);
 	MexVector<int> IOutsertIndex(N);
-	int M = Network.size();
+	size_t M = Network.size();
 	if (indirection.size() != M) indirection.resize(M);
 
 	for (int i = 0; i < M; ++i){
@@ -63,7 +63,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			float Vnew, Unew;
 			Vnew = Vnow[j] + (Vnow[j] * (0.04f*Vnow[j] + 5.0f) + 140.0f - Unow[j] + (float)Iin[j] / (1 << 17) + Iext[j]) / onemsbyTstep;
 			Unew = Unow[j] + (Neurons[j].a*(Neurons[j].b*Vnow[j] - Unow[j])) / onemsbyTstep;
-			Vnow[j] = Vnew;
+			Vnow[j] = (Vnew > -100)? Vnew: -100;
 			Unow[j] = Unew;
 
 			//Implementing Network Computation in case a Neuron has spiked in the current interval
@@ -72,7 +72,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 
 				LastSpikedTimeNeuron[j] = time;
 				if (PreSynNeuronSectionBeg[j] >= 0)
-					for (int k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k)
+					for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k)
 						NAdditionalSpikesNow[(CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize].fetch_and_increment();
 				//Space to implement any causal Learning Rule
 			}
@@ -90,10 +90,10 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 	int RangeEnd = Range.end();
 	for (int j = RangeBeg; j < RangeEnd; ++j){
 		if (Vnow[j] == 30.0){
-			int CurrNeuronSectionBeg = PreSynNeuronSectionBeg[j];
-			int CurrNeuronSectionEnd = PreSynNeuronSectionEnd[j];
+			size_t CurrNeuronSectionBeg = PreSynNeuronSectionBeg[j];
+			size_t CurrNeuronSectionEnd = PreSynNeuronSectionEnd[j];
 			if (CurrNeuronSectionBeg >= 0)
-				for (int k = CurrNeuronSectionBeg; k < CurrNeuronSectionEnd; ++k){
+				for (size_t k = CurrNeuronSectionBeg; k < CurrNeuronSectionEnd; ++k){
 					int ThisQueue = (CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize;
 					int ThisLoadingInd = CurrentSpikeLoadingInd[ThisQueue].fetch_and_increment();
 					SpikeQueue[ThisQueue][ThisLoadingInd] = k;
@@ -104,13 +104,17 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 void InputArgs::IExtFunc(float time, MexVector<float> &Iin)
 {
 	//((int)(time / 0.1))
-	if (time - ((int)(time / 0.1))*0.1 <= 0.015){
+	if (time - 0.1 <= 0.015){	//((int)(time / 0.1))*
 		for (int i = 0; i < 200; ++i)
 			Iin[i] = 9;
 	}
+	else if (time - 0.8 <= 0.015){	//((int)(time / 0.1))*
+		for (int i = 0; i < 200; ++i)
+			Iin[i] = 4;
+	}
 	else{
 		for (int i = 0; i < 200; ++i)
-			Iin[i] = 0;
+			Iin[i] = 4;
 	}
 }
 
@@ -146,7 +150,7 @@ void SimulateParallel(
 	const int StatusDisplayInterval = InputArguments.StatusDisplayInterval;
 
 	int nSteps = NoOfms*onemsbyTstep;
-	int N = InputArguments.Neurons.size(), M = InputArguments.Network.size();
+	size_t N = InputArguments.Neurons.size(), M = InputArguments.Network.size();
 	int i;	//Generic Loop Variable (GLV)
 	int time = Tbeg;            // The variable that gives the time instant in terms of 
 	                            // number of steps
@@ -164,20 +168,20 @@ void SimulateParallel(
 	                                                // in sequence of their index
 	MexVector<int> AuxArray(M);					    // Auxillary Array that is an indirection between Network
 												    // and an array sorted lexicographically by (NEnd, NStart)
-	MexVector<int> PreSynNeuronSectionBeg(N, -1);	// PreSynNeuronSectionBeg[j] Maintains the list of the 
-	                                                // index of the first synapse in Network with NStart = j+1
-	MexVector<int> PreSynNeuronSectionEnd(N, -1);	// PostSynNeuronSectionEnd[j] Maintains the list of the 
-	                                                // indices one greater than index of the last synapse in 
-	                                                // Network with NStart = j+1
+	MexVector<size_t> PreSynNeuronSectionBeg(N, -1);	// PreSynNeuronSectionBeg[j] Maintains the list of the 
+														// index of the first synapse in Network with NStart = j+1
+	MexVector<size_t> PreSynNeuronSectionEnd(N, -1);	// PostSynNeuronSectionEnd[j] Maintains the list of the 
+														// indices one greater than index of the last synapse in 
+														// Network with NStart = j+1
 
-	MexVector<int> PostSynNeuronSectionBeg(N, -1);	// PostSynNeuronSectionBeg[j] Maintains the list of the 
-	                                                // index of the first synapse in AuxArray with NEnd = j+1
-	MexVector<int> PostSynNeuronSectionEnd(N, -1);	// PostSynNeuronSectionEnd[j] Maintains the list of the 
-	                                                // indices one greater than index of the last synapse in 
-	                                                // AuxArray with NEnd = j+1
+	MexVector<size_t> PostSynNeuronSectionBeg(N, -1);	// PostSynNeuronSectionBeg[j] Maintains the list of the 
+														// index of the first synapse in AuxArray with NEnd = j+1
+	MexVector<size_t> PostSynNeuronSectionEnd(N, -1);	// PostSynNeuronSectionEnd[j] Maintains the list of the 
+														// indices one greater than index of the last synapse in 
+														// AuxArray with NEnd = j+1
 
 	float CurrentDecayFactor;					//Current Decay Factor in the current model
-	CurrentDecayFactor = powf(1.0f / 2, 1.0f / onemsbyTstep);
+	CurrentDecayFactor = powf(7.0f / 10, 1.0f / onemsbyTstep);
 	//----------------------------------------------------------------------------------------------//
 	//--------------------------------- Initializing output Arrays ---------------------------------//
 	//----------------------------------------------------------------------------------------------//
@@ -319,7 +323,7 @@ void SimulateParallel(
 		// GIVE ERROR MESSAGE HERE
 		return;
 	}
-	int QueueSize = SpikeQueue.size();
+	size_t QueueSize = SpikeQueue.size();
 
 	// Setting Initial Conditions for LastSpikedTimes
 	if (LastSpikedTimeNeuron.istrulyempty()){
@@ -353,12 +357,13 @@ void SimulateParallel(
 		The vector corresponding to the spikes processed in the current 
 		iteration is cleared after the calculation of Itemp
 	*/
-	unsigned int maxSpikeno = 0;
+	size_t maxSpikeno = 0;
 	tbb::affinity_partitioner apCurrentUpdate;
 	tbb::affinity_partitioner apNeuronSim;
 	int TotalStorageStepSize = (StorageStepSize*onemsbyTstep); // used everywhere
+	int epilepsyctr = 0;
 	for (i = 1; i<=nSteps; ++i){
-
+		
 		InputArgs::IExtFunc(time*0.001f/onemsbyTstep, Iext);
 		time = time + 1;
 
@@ -367,10 +372,21 @@ void SimulateParallel(
 		tbb::parallel_for(tbb::blocked_range<int>(0, N, 3000),
 			CurrentAttenuate(Iin, CurrentDecayFactor));
 
-		int QueueSubEnd = SpikeQueue[CurrentQueueIndex].size();
+		size_t QueueSubEnd = SpikeQueue[CurrentQueueIndex].size();
 		//maxSpikeno = max((unsigned int)QueueSubEnd, maxSpikeno);
 		maxSpikeno += QueueSubEnd;
-
+		if (QueueSubEnd > (2*M) / (5))
+		{
+			epilepsyctr++;
+			if (epilepsyctr > 100){
+#ifdef MEX_LIB
+				mexErrMsgTxt("Epileptic shit");
+#elif defined MEX_EXE
+				printf("Epilepsy Nyuh!!");
+#endif
+				return;
+			}
+		}
 		// This iter calculates Itemp as in above diagram
 		if (SpikeQueue[CurrentQueueIndex].size() != 0)
 			tbb::parallel_for(tbb::blocked_range<int*>((int*)&SpikeQueue[CurrentQueueIndex][0],
@@ -386,7 +402,7 @@ void SimulateParallel(
 		/////// This is code to extend vectors before they are written to.
 		for (int k = 0; k < QueueSize; ++k){
 			if (SpikeQueue[k].size() + NAdditionalSpikesNow[k].load() > SpikeQueue[k].capacity()){
-				int temp = SpikeQueue[k].size() + NAdditionalSpikesNow[k].load();
+				size_t temp = SpikeQueue[k].size() + NAdditionalSpikesNow[k].load();
 				int IncreaseExponent = 0;
 				if (SpikeQueue[k].capacity()){
 					do{
@@ -437,7 +453,7 @@ void SimulateParallel(
 
 			// Storing Weights
 			if (OutputControl & OutOps::WEIGHTOUT_REQ && InterestingSyns.size()){
-				int tempSize = InterestingSyns.size();
+				size_t tempSize = InterestingSyns.size();
 				for (int j = 0; j < tempSize; ++j)
 					PureOutputs.WeightOut(CurrentInsertPos, j) = Network[InterestingSyns[j]].Weight;
 			}
