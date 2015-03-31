@@ -81,8 +81,8 @@ int getOutputControl(char* OutputControlSequence){
 
 void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgList){
 
-	int N = mxGetNumberOfElements(mxGetField(MatlabInputStruct, 0, "a"));
-	int M = mxGetNumberOfElements(mxGetField(MatlabInputStruct, 0, "NStart"));
+	size_t N = mxGetNumberOfElements(mxGetField(MatlabInputStruct, 0, "a"));
+	size_t M = mxGetNumberOfElements(mxGetField(MatlabInputStruct, 0, "NStart"));
 
 	InputArgList.onemsbyTstep = *reinterpret_cast<int *>(mxGetData(mxGetField(MatlabInputStruct, 0, "onemsbyTstep")));
 	InputArgList.NoOfms = *reinterpret_cast<int *>(mxGetData(mxGetField(MatlabInputStruct, 0, "NoOfms")));
@@ -147,7 +147,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 	// Initializing InterestingSyns
 	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "InterestingSyns");
 	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
-		int NumElems = mxGetNumberOfElements(genmxArrayPtr);
+		size_t NumElems = mxGetNumberOfElements(genmxArrayPtr);
 		genIntPtr[0] = reinterpret_cast<int *>(mxGetData(genmxArrayPtr));
 		InputArgList.InterestingSyns = MexVector<int>(NumElems);
 		InputArgList.InterestingSyns.copyArray(0, genIntPtr[0], NumElems);
@@ -185,7 +185,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		int SpikeQueueSize = InputArgList.onemsbyTstep * InputArgList.DelayRange;
 		InputArgList.SpikeQueue = MexVector<MexVector<int> >(SpikeQueueSize);
 		for (int i = 0; i < SpikeQueueSize; ++i){
-			int NumOfSpikes = mxGetNumberOfElements(SpikeQueueArr[i]);
+			size_t NumOfSpikes = mxGetNumberOfElements(SpikeQueueArr[i]);
 			InputArgList.SpikeQueue[i] = MexVector<int>(NumOfSpikes);
 			int * CurrQueueArr = reinterpret_cast<int *>(mxGetData(SpikeQueueArr[i]));
 			InputArgList.SpikeQueue[i].copyArray(0, CurrQueueArr, NumOfSpikes);
@@ -260,7 +260,7 @@ template<typename T> mxArray * assignmxArray(MexVector<MexVector<T> > &VectorOut
 	if (VectorOut.size()){
 		ReturnPointer = mxCreateCellMatrix(VectorOut.size(), 1);
 		
-		int VectVectSize = VectorOut.size();
+		size_t VectVectSize = VectorOut.size();
 		for (int i = 0; i < VectVectSize; ++i){
 			mxSetCell(ReturnPointer, i, assignmxArray(VectorOut[i], ClassID));
 		}

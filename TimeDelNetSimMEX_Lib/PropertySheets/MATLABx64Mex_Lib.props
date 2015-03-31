@@ -13,6 +13,7 @@
     <Link>
       <AdditionalLibraryDirectories>$(MATLAB_ROOT)\extern\lib\win64\microsoft;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>libmx.lib;libmex.lib;libmat.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/export:mexFunction %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <ClCompile>
       <PreprocessorDefinitions>MEX_LIB;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>

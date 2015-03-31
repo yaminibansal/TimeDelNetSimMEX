@@ -60,8 +60,8 @@ struct NeuronSimulate{
 	MexVector<Synapse> &Network;
 	int CurrentQueueIndex, QueueSize, onemsbyTstep, time;
 	float CurrentDecayFactor;
-	MexVector<int> &PreSynNeuronSectionBeg;
-	MexVector<int> &PreSynNeuronSectionEnd;
+	MexVector<size_t> &PreSynNeuronSectionBeg;
+	MexVector<size_t> &PreSynNeuronSectionEnd;
 	atomicIntVect &NAdditionalSpikesNow;
 	MexVector<int> &LastSpikedTimeNeuron;
 
@@ -74,8 +74,8 @@ struct NeuronSimulate{
 		MexVector<Synapse> &Network_,
 		int CurrentQueueIndex_, int QueueSize_, int onemsbyTstep_,
 		float CurrentDecayFactor_, int time_,
-		MexVector<int> &PreSynNeuronSectionBeg_,
-		MexVector<int> &PreSynNeuronSectionEnd_,
+		MexVector<size_t> &PreSynNeuronSectionBeg_,
+		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		atomicIntVect &NAdditionalSpikesNow_,
 		MexVector<int> &LastSpikedTimeNeuron_
 		) :
@@ -99,8 +99,8 @@ struct SpikeRecord{
 	MexVector<float> &Vnow;
 	MexVector<Synapse> &Network;
 	int CurrentQueueIndex, QueueSize;
-	MexVector<int> &PreSynNeuronSectionBeg;
-	MexVector<int> &PreSynNeuronSectionEnd;
+	MexVector<size_t> &PreSynNeuronSectionBeg;
+	MexVector<size_t> &PreSynNeuronSectionEnd;
 	atomicIntVect &CurrentSpikeLoadingInd;
 	MexVector<MexVector<int> > &SpikeQueue;
 
@@ -108,8 +108,8 @@ struct SpikeRecord{
 		MexVector<float> &Vnow_,
 		MexVector<Synapse> &Network_,
 		int CurrentQueueIndex_, int QueueSize_,
-		MexVector<int> &PreSynNeuronSectionBeg_,
-		MexVector<int> &PreSynNeuronSectionEnd_,
+		MexVector<size_t> &PreSynNeuronSectionBeg_,
+		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		atomicIntVect &CurrentSpikeLoadingInd_,
 		MexVector<MexVector<int> > &SpikeQueue_
 		) :
