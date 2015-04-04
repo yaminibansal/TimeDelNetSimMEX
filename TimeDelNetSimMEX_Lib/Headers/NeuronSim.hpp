@@ -137,6 +137,13 @@ struct CurrentAttenuate{
 	void operator() (tbb::blocked_range<int> &Range) const; 
 };
 
+// Incomplete declarations
+struct InputArgs;
+struct StateVarsOutStruct;
+struct FinalStateStruct;
+struct OutputVarsStruct;
+
+
 struct InputArgs{
 	static void IExtFunc(float, MexVector<float> &);
 	MexVector<Synapse> Network;
@@ -169,14 +176,147 @@ struct InputArgs{
 		LSTSyn() {}
 };
 
-struct OutputVars{
-	MexMatrix<float> WeightOut;
+struct InternalVars{
+	int N;
+	int M;
+	int i;	//This is the most important loop index that is definitely a state variable
+			// and plays a crucial role in deciding the index into which the output must be performed
+	int Time;	// must be initialized befor beta
+	int beta;	// This is another parameter that plays a rucial role when storing sparsely.
+				// It is the first value of i for which the sparse storage must be done.
+				// goes from 1 to StorageStepSize * onemsbyTstep
+	int onemsbyTstep;
+	int NoOfms;
+	int DelayRange;
+	int CurrentQIndex;
+	int OutputControl;
+	int StorageStepSize;
+	const int StatusDisplayInterval;
 
-	OutputVars() :
-		WeightOut() {}
+	MexVector<Synapse> &Network;
+	MexVector<Neuron> &Neurons;
+	MexVector<int> &InterestingSyns;
+	MexVector<float> &V;
+	MexVector<float> &U;
+	atomicLongVect Iin;
+	MexVector<float> Iext;
+	MexVector<MexVector<int> > &SpikeQueue;
+	MexVector<int> &LSTNeuron;
+	MexVector<int> &LSTSyn;
+
+	InternalVars(InputArgs &IArgs) :
+		N(IArgs.Neurons.size()),
+		M(IArgs.Network.size()),
+		i(0),
+		Time(IArgs.Time),
+		// beta defined conditionally below
+		CurrentQIndex(IArgs.CurrentQIndex),
+		OutputControl(IArgs.OutputControl),
+		StorageStepSize(IArgs.StorageStepSize),
+		StatusDisplayInterval(IArgs.StatusDisplayInterval),
+		Network(IArgs.Network),
+		Neurons(IArgs.Neurons),
+		InterestingSyns(IArgs.InterestingSyns),
+		V(IArgs.V),
+		U(IArgs.U),
+		Iin(N),	// Iin is defined separately as an atomic vect.
+		Iext(N, 0.0f),
+		SpikeQueue(IArgs.SpikeQueue),
+		LSTNeuron(IArgs.LSTNeuron),
+		LSTSyn(IArgs.LSTSyn),
+		onemsbyTstep(IArgs.onemsbyTstep),
+		NoOfms(IArgs.NoOfms),
+		DelayRange(IArgs.DelayRange) {
+		// Setting value of beta
+		if (StorageStepSize)
+			beta = (onemsbyTstep * NoOfms) - StorageStepSize % (onemsbyTstep * NoOfms);
+		else
+			beta = 0;
+
+		// Setting Initial Conditions of V and U
+		if (U.istrulyempty()){
+			U.resize(N);
+			for (int i = 0; i<N; ++i)
+				U[i] = Neurons[i].b*(Neurons[i].b - 5.0f - sqrt((5.0f - Neurons[i].b)*(5.0f - Neurons[i].b) - 22.4f)) / 0.08f;
+		}
+		else if (U.size() != N){
+			// GIVE ERROR MESSAGE HERE
+			return;
+		}
+
+		if (V.istrulyempty()){
+			V.resize(N);
+			for (int i = 0; i<N; ++i){
+				V[i] = (Neurons[i].b - 5.0f - sqrt((5.0f - Neurons[i].b)*(5.0f - Neurons[i].b) - 22.4f)) / 0.08f;
+			}
+		}
+		else if (V.size() != N){
+			// GIVE ERROR MESSAGE HEREx
+			return;
+		}
+
+		// Setting Initial Conditions for INTERNAL CURRENT
+		if (IArgs.I.size() == N){
+			InputArgs::IExtFunc((IArgs.Time - 1)*0.001f / onemsbyTstep, Iext);
+			for (int i = 0; i < N; ++i){
+				Iin[i] = (long long int)((IArgs.I[i] - Iext[i]) * (1 << 17));
+			}
+		}
+		else if (IArgs.I.size()){
+			// GIVE ERROR MESSAGE HERE
+			return;
+		}
+		//else{
+		//	I is already initialized to zero by tbb::zero_allocator<long long>
+		//}
+
+		// Setting Initial Conditions of SpikeQueue
+		if (SpikeQueue.istrulyempty()){
+			SpikeQueue = MexVector<MexVector<int> >(onemsbyTstep * DelayRange, MexVector<int>());
+		}
+		else if (SpikeQueue.size() != onemsbyTstep * DelayRange){
+			// GIVE ERROR MESSAGE HERE
+			return;
+		}
+
+		// Setting Initial Conditions for LSTs
+		if (LSTNeuron.istrulyempty()){
+			LSTNeuron = MexVector<int>(N, -1);
+		}
+		else if (LSTNeuron.size() != N){
+			//GIVE ERROR MESSAGE HERE
+			return;
+		}
+		if (LSTSyn.istrulyempty()){
+			LSTSyn = MexVector<int>(M, -1);
+		}
+		else if (LSTSyn.size() != M){
+			//GIVE ERROR MESSAGE HERE
+			return;
+		}
+	}
+	void DoStateOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
+		DoFullOutput(StateOut, OutVars);
+		if (StorageStepSize && !(Time % (StorageStepSize*onemsbyTstep))){
+			DoSparseOutput(StateOut, OutVars);
+		}
+	}
+	void DoFinalOutput(FinalStateStruct &FinalStateOut);
+private:
+	void DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars);
+	void DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars);
 };
 
-struct StateVarsOut{
+struct OutputVarsStruct{
+	MexMatrix<float> WeightOut;
+
+	OutputVarsStruct() :
+		WeightOut() {}
+
+	void initialize(const InternalVars &);
+};
+
+struct StateVarsOutStruct{
 	MexMatrix<float> WeightOut;
 	MexMatrix<float> VOut;
 	MexMatrix<float> UOut;
@@ -187,7 +327,7 @@ struct StateVarsOut{
 	MexMatrix<int> LSTNeuronOut;
 	MexMatrix<int> LSTSynOut;
 
-	StateVarsOut() :
+	StateVarsOutStruct() :
 		WeightOut(),
 		VOut(),
 		UOut(),
@@ -197,9 +337,11 @@ struct StateVarsOut{
 		CurrentQIndexOut(),
 		LSTNeuronOut(),
 		LSTSynOut() {}
+
+	void initialize(const InternalVars &);
 };
 
-struct FinalState{
+struct FinalStateStruct{
 	MexVector<float> Weight;
 	MexVector<float> V;
 	MexVector<float> U;
@@ -210,7 +352,7 @@ struct FinalState{
 	int Time;
 	int CurrentQIndex;
 
-	FinalState() :
+	FinalStateStruct() :
 		Weight(),
 		V(),
 		U(),
@@ -218,14 +360,16 @@ struct FinalState{
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
-};
+
+	void initialize(const InternalVars &);
+};	
 
 void CountingSort(int N, MexVector<Synapse> &Network, MexVector<int> &indirection);
 
 void SimulateParallel(
 	InputArgs &&InputArguments,
-	OutputVars &PureOutputs,
-	StateVarsOut &StateVarsOutput,
-	FinalState &FinalStateOutput);
+	OutputVarsStruct &PureOutputs,
+	StateVarsOutStruct &StateVarsOutput,
+	FinalStateStruct &FinalStateOutput);
 
 #endif

@@ -271,7 +271,7 @@ template<typename T> mxArray * assignmxArray(MexVector<MexVector<T> > &VectorOut
 	return ReturnPointer;
 }
 
-mxArray * putOutputToMatlabStruct(OutputVars &Output){
+mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 	const char *FieldNames[] = { "WeightOut" };
 
 	int NFields = 1;
@@ -285,7 +285,7 @@ mxArray * putOutputToMatlabStruct(OutputVars &Output){
 	return ReturnPointer;
 }
 
-mxArray * putStateToMatlabStruct(StateVarsOut &Output){
+mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	const char *FieldNames[] = {
 		"V",
 		"I",
@@ -324,7 +324,7 @@ mxArray * putStateToMatlabStruct(StateVarsOut &Output){
 	return ReturnPointer;
 }
 
-mxArray* putFinalStatetoMatlabStruct(FinalState &FinalStateList){
+mxArray* putFinalStatetoMatlabStruct(FinalStateStruct &FinalStateList){
 	const char *FieldNames[] = {
 		"V",
 		"I",
@@ -375,9 +375,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 	takeInputFromMatlabStruct(prhs[0], InputArgList);
 
 	// Declaring Output Vectors
-	OutputVars PureOutput;
-	StateVarsOut StateVarsOutput;
-	FinalState FinalStateOutput;
+	OutputVarsStruct PureOutput;
+	StateVarsOutStruct StateVarsOutput;
+	FinalStateStruct FinalStateOutput;
 	// Declaring Final State output vectors
 	
 	// Running Simulation Function.
