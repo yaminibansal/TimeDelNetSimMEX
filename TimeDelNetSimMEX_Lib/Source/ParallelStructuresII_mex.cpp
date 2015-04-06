@@ -139,36 +139,37 @@ void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
 	else{
 		TimeDimLen = nSteps;
 	}
-	if (OutputControl & OutOps::WEIGHTOUT_REQ)
+	if (OutputControl & OutOps::WEIGHT_REQ)
 		if (!(IntVars.InterestingSyns.size()))
-			WeightOut = MexMatrix<float>(TimeDimLen, M);
+			this->WeightOut = MexMatrix<float>(TimeDimLen, M);
 
-	if (OutputControl & OutOps::VOUT_REQ)
-		VOut = MexMatrix<float>(TimeDimLen, N);
+	if (OutputControl & OutOps::V_REQ)
+		this->VOut = MexMatrix<float>(TimeDimLen, N);
 
-	if (OutputControl & OutOps::UOUT_REQ)
-		UOut = MexMatrix<float>(TimeDimLen, N);
+	if (OutputControl & OutOps::U_REQ)
+		this->UOut = MexMatrix<float>(TimeDimLen, N);
 
-	if (OutputControl & OutOps::IOUT_REQ)
-		IOut = MexMatrix<float>(TimeDimLen, N);
+	if (OutputControl & OutOps::I_IN_REQ)
+		this->IinOut = MexMatrix<float>(TimeDimLen, N);
 
-	TimeOut = MexVector<int>(TimeDimLen);
+	this->TimeOut = MexVector<int>(TimeDimLen);
 
 	if (OutputControl & OutOps::LASTSPIKED_NEU_REQ)
-		LSTNeuronOut = MexMatrix<int>(TimeDimLen, N);
+		this->LSTNeuronOut = MexMatrix<int>(TimeDimLen, N);
 
 	if (OutputControl & OutOps::LASTSPIKED_SYN_REQ)
-		LSTSynOut = MexMatrix<int>(TimeDimLen, M);
+		this->LSTSynOut = MexMatrix<int>(TimeDimLen, M);
 
-	if (OutputControl & OutOps::SPIKE_QUEUE_OUT_REQ)
-		SpikeQueueOut = MexVector<MexVector<MexVector<int> > >(TimeDimLen,
-		MexVector<MexVector<int> >(onemsbyTstep * DelayRange, MexVector<int>()));
+	if (OutputControl & OutOps::SPIKE_QUEUE_REQ)
+		this->SpikeQueueOut = MexVector<MexVector<MexVector<int> > >(TimeDimLen,
+			MexVector<MexVector<int> >(onemsbyTstep * DelayRange, MexVector<int>()));
 
 	if (OutputControl & OutOps::CURRENT_QINDS_REQ)
-		CurrentQIndexOut = MexVector<int>(TimeDimLen);
+		this->CurrentQIndexOut = MexVector<int>(TimeDimLen);
 }
 void OutputVarsStruct::initialize(const InternalVars &IntVars){
 	int TimeDimLen;
+	int N = IntVars.N;
 	int onemsbyTstep = IntVars.onemsbyTstep;
 	int NoOfms = IntVars.NoOfms;
 	int StorageStepSize = IntVars.StorageStepSize;
@@ -184,8 +185,11 @@ void OutputVarsStruct::initialize(const InternalVars &IntVars){
 		TimeDimLen = nSteps;
 	}
 
-	if (OutputControl & OutOps::WEIGHTOUT_REQ)
-		WeightOut = MexMatrix<float>(TimeDimLen, IntVars.InterestingSyns.size());
+	if (OutputControl & OutOps::WEIGHT_REQ)
+		if (IntVars.InterestingSyns.size())
+			this->WeightOut = MexMatrix<float>(TimeDimLen, IntVars.InterestingSyns.size());
+	if (OutputControl & OutOps::I_TOT_REQ)
+		this->Itot = MexMatrix<float>(TimeDimLen, N);
 }
 void FinalStateStruct::initialize(const InternalVars &IntVars){
 	int OutputControl	= IntVars.OutputControl;
@@ -197,7 +201,7 @@ void FinalStateStruct::initialize(const InternalVars &IntVars){
 	if (OutputControl & OutOps::FINAL_STATE_REQ){
 		this->V = MexVector<float>(N);
 		this->U = MexVector<float>(N);
-		this->I = MexVector<float>(N);
+		this->Iin = MexVector<float>(N);
 		this->Weight = MexVector<float>(M);
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
@@ -216,7 +220,7 @@ void InitialStateStruct::initialize(const InternalVars &IntVars){
 	if (OutputControl & OutOps::INITIAL_STATE_REQ){
 		this->V = MexVector<float>(N);
 		this->U = MexVector<float>(N);
-		this->I = MexVector<float>(N);
+		this->Iin = MexVector<float>(N);
 		this->Weight = MexVector<float>(M);
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
@@ -229,29 +233,29 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 
 	int CurrentInsertPos = (i - beta) / (onemsbyTstep * NoOfms);
 	int QueueSize = onemsbyTstep * DelayRange;
-	// Storing U,V,Iout and Time
-	if (OutputControl & OutOps::VOUT_REQ)
+	// Storing U,V,Iin and Time
+	if (OutputControl & OutOps::V_REQ)
 		StateOut.VOut[CurrentInsertPos] = V;
-	if (OutputControl & OutOps::UOUT_REQ)
+	if (OutputControl & OutOps::U_REQ)
 		StateOut.UOut[CurrentInsertPos] = U;
-	if (OutputControl & OutOps::IOUT_REQ)
+	if (OutputControl & OutOps::I_IN_REQ)
 		for (int j = 0; j < N; ++j)
-			StateOut.IOut(CurrentInsertPos, j) = Iext[j] + (float)Iin[j] / (1 << 17);
+			StateOut.IinOut(CurrentInsertPos, j) = (float)Iin[j] / (1 << 17);
 	StateOut.TimeOut[CurrentInsertPos] = Time;
 
 	// Storing Weights
-	if (OutputControl & OutOps::WEIGHTOUT_REQ && InterestingSyns.size()){
+	if (OutputControl & OutOps::WEIGHT_REQ && InterestingSyns.size()){
 		size_t tempSize = InterestingSyns.size();
 		for (int j = 0; j < tempSize; ++j)
 			OutVars.WeightOut(CurrentInsertPos, j) = Network[InterestingSyns[j]].Weight;
 	}
-	else if (OutputControl & OutOps::WEIGHTOUT_REQ){
+	else if (OutputControl & OutOps::WEIGHT_REQ){
 		for (int j = 0; j < M; ++j)
 			StateOut.WeightOut(CurrentInsertPos, j) = Network[j].Weight;
 	}
 
 	// Storing Spike Queue related state informations
-	if (OutputControl & OutOps::SPIKE_QUEUE_OUT_REQ)
+	if (OutputControl & OutOps::SPIKE_QUEUE_REQ)
 		for (int j = 0; j < QueueSize; ++j)
 			StateOut.SpikeQueueOut[CurrentInsertPos][j] = SpikeQueue[j];
 	if (OutputControl & OutOps::CURRENT_QINDS_REQ)
@@ -262,34 +266,40 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 		StateOut.LSTNeuronOut[CurrentInsertPos] = LSTNeuron;
 	if (OutputControl & OutOps::LASTSPIKED_SYN_REQ)
 		StateOut.LSTSynOut[CurrentInsertPos] = LSTSyn;
+
+	// Storing Itot
+	if (OutputControl & OutOps::I_TOT_REQ){
+		for (int j = 0; j < N; ++j)
+			OutVars.Itot(CurrentInsertPos, j) = Iext[j] + (float)Iin[j] / (1 << 17);
+	}
 }
 void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
 	if (!StorageStepSize){
 		int CurrentInsertPos = i - 1;
 		int QueueSize = onemsbyTstep * DelayRange;
 		// Storing U,V,Iout and Time
-		if (OutputControl & OutOps::VOUT_REQ)
+		if (OutputControl & OutOps::V_REQ)
 			StateOut.VOut[CurrentInsertPos] = V;
-		if (OutputControl & OutOps::UOUT_REQ)
+		if (OutputControl & OutOps::U_REQ)
 			StateOut.UOut[CurrentInsertPos] = U;
-		if (OutputControl & OutOps::IOUT_REQ)
+		if (OutputControl & OutOps::I_IN_REQ)
 			for (int j = 0; j < N; ++j)
-				StateOut.IOut(CurrentInsertPos, j) = Iext[j] + (float)Iin[j] / (1 << 17);
+				StateOut.IinOut(CurrentInsertPos, j) = (float)Iin[j] / (1 << 17);
 		StateOut.TimeOut[CurrentInsertPos] = Time;
 
 		// Storing Weights
-		if (OutputControl & OutOps::WEIGHTOUT_REQ && InterestingSyns.size()){
+		if (OutputControl & OutOps::WEIGHT_REQ && InterestingSyns.size()){
 			size_t tempSize = InterestingSyns.size();
 			for (int j = 0; j < tempSize; ++j)
 				OutVars.WeightOut(CurrentInsertPos, j) = Network[InterestingSyns[j]].Weight;
 		}
-		else if (OutputControl & OutOps::WEIGHTOUT_REQ){
+		else if (OutputControl & OutOps::WEIGHT_REQ){
 			for (int j = 0; j < M; ++j)
 				StateOut.WeightOut(CurrentInsertPos, j) = Network[j].Weight;
 		}
 
 		// Storing Spike Queue related state informations
-		if (OutputControl & OutOps::SPIKE_QUEUE_OUT_REQ)
+		if (OutputControl & OutOps::SPIKE_QUEUE_REQ)
 			for (int j = 0; j < QueueSize; ++j)
 				StateOut.SpikeQueueOut[CurrentInsertPos][j] = SpikeQueue[j];
 		if (OutputControl & OutOps::CURRENT_QINDS_REQ)
@@ -300,12 +310,18 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 			StateOut.LSTNeuronOut[CurrentInsertPos] = LSTNeuron;
 		if (OutputControl & OutOps::LASTSPIKED_SYN_REQ)
 			StateOut.LSTSynOut[CurrentInsertPos] = LSTSyn;
+
+		// Storing Itot
+		if (OutputControl & OutOps::I_TOT_REQ){
+			for (int j = 0; j < N; ++j)
+				OutVars.Itot(CurrentInsertPos, j) = Iext[j] + (float)Iin[j] / (1 << 17);
+		}
 	}
 }
 void InternalVars::DoSingleStateOutput(SingleStateStruct &FinalStateOut){
 	int QueueSize = onemsbyTstep * DelayRange;
 	for (int j = 0; j < N; ++j){
-		FinalStateOut.I[j] = Iext[j] + (float)Iin[j] / (1 << 17);
+		FinalStateOut.Iin[j] = (float)Iin[j] / (1 << 17);
 	}
 	FinalStateOut.V = V;
 	FinalStateOut.U = U;
@@ -522,7 +538,7 @@ void SimulateParallel(
 		for (int k = 0; k < QueueSize; ++k) NAdditionalSpikesNow[k] = 0;
 		CurrentQueueIndex = (CurrentQueueIndex + 1) % QueueSize;
 
-		IntVars.DoStateOutput(StateVarsOutput, PureOutputs);
+		IntVars.DoOutput(StateVarsOutput, PureOutputs);
 
 		// Status Display Section
 		if (!(i % StatusDisplayInterval)){

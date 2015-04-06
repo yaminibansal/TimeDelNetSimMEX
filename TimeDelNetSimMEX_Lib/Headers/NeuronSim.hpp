@@ -15,17 +15,18 @@ using namespace std;
 
 struct OutOps{
 	enum {
-		VOUT_REQ = 0x0001,
-		IOUT_REQ = 0x0002,
-		TIME_REQ = 0x0004,
-		UOUT_REQ = 0x0008,
-		WEIGHTOUT_REQ = 0x0010,
-		CURRENT_QINDS_REQ = 0x0020,
-		SPIKE_QUEUE_OUT_REQ = 0x0040,
-		LASTSPIKED_NEU_REQ = 0x0080,
-		LASTSPIKED_SYN_REQ = 0x0100,
-		INITIAL_STATE_REQ = 0x0200,
-		FINAL_STATE_REQ = 0x8000,
+		V_REQ               = (1 << 0), 
+		I_IN_REQ            = (1 << 1), 
+		TIME_REQ            = (1 << 2), 
+		U_REQ               = (1 << 3), 
+		WEIGHT_REQ          = (1 << 4), 
+		CURRENT_QINDS_REQ   = (1 << 5), 
+		SPIKE_QUEUE_REQ     = (1 << 6), 
+		LASTSPIKED_NEU_REQ  = (1 << 7), 
+		LASTSPIKED_SYN_REQ  = (1 << 8), 
+		I_TOT_REQ           = (1 << 9), 
+		INITIAL_STATE_REQ   = (1 << 10), 
+		FINAL_STATE_REQ     = (1 << 11), 
 	};
 };
 
@@ -154,7 +155,7 @@ struct InputArgs{
 	MexVector<int> InterestingSyns;
 	MexVector<float> V;
 	MexVector<float> U;
-	MexVector<float> I;
+	MexVector<float> Iin;
 	MexVector<MexVector<int> > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
@@ -173,7 +174,7 @@ struct InputArgs{
 		InterestingSyns(),
 		V(),
 		U(),
-		I(),
+		Iin(),
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
@@ -259,13 +260,12 @@ struct InternalVars{
 		}
 
 		// Setting Initial Conditions for INTERNAL CURRENT
-		if (IArgs.I.size() == N){
-			InputArgs::IExtFunc((IArgs.Time - 1)*0.001f / onemsbyTstep, Iext);
+		if (IArgs.Iin.size() == N){
 			for (int i = 0; i < N; ++i){
-				Iin[i] = (long long int)((IArgs.I[i] - Iext[i]) * (1 << 17));
+				Iin[i] = (long long int)(IArgs.Iin[i] * (1 << 17));
 			}
 		}
-		else if (IArgs.I.size()){
+		else if (IArgs.Iin.size()){
 			// GIVE ERROR MESSAGE HERE
 			return;
 		}
@@ -298,7 +298,7 @@ struct InternalVars{
 			return;
 		}
 	}
-	void DoStateOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
+	void DoOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
 		DoFullOutput(StateOut, OutVars);
 		if (StorageStepSize && !(Time % (StorageStepSize*onemsbyTstep))){
 			DoSparseOutput(StateOut, OutVars);
@@ -312,6 +312,7 @@ private:
 
 struct OutputVarsStruct{
 	MexMatrix<float> WeightOut;
+	MexMatrix<float> Itot;
 
 	OutputVarsStruct() :
 		WeightOut() {}
@@ -323,7 +324,7 @@ struct StateVarsOutStruct{
 	MexMatrix<float> WeightOut;
 	MexMatrix<float> VOut;
 	MexMatrix<float> UOut;
-	MexMatrix<float> IOut;
+	MexMatrix<float> IinOut;
 	MexVector<int> TimeOut;
 	MexVector<MexVector<MexVector<int> > > SpikeQueueOut;
 	MexVector<int> CurrentQIndexOut;
@@ -334,7 +335,7 @@ struct StateVarsOutStruct{
 		WeightOut(),
 		VOut(),
 		UOut(),
-		IOut(),
+		IinOut(),
 		TimeOut(),
 		SpikeQueueOut(),
 		CurrentQIndexOut(),
@@ -347,7 +348,7 @@ struct SingleStateStruct{
 	MexVector<float> Weight;
 	MexVector<float> V;
 	MexVector<float> U;
-	MexVector<float> I;
+	MexVector<float> Iin;
 	MexVector<MexVector<int > > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
@@ -358,7 +359,7 @@ struct SingleStateStruct{
 		Weight(),
 		V(),
 		U(),
-		I(),
+		Iin(),
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
