@@ -24,7 +24,8 @@ struct OutOps{
 		SPIKE_QUEUE_OUT_REQ = 0x0040,
 		LASTSPIKED_NEU_REQ = 0x0080,
 		LASTSPIKED_SYN_REQ = 0x0100,
-		FINAL_STATE_REQ = 0x8000
+		INITIAL_STATE_REQ = 0x0200,
+		FINAL_STATE_REQ = 0x8000,
 	};
 };
 
@@ -140,7 +141,9 @@ struct CurrentAttenuate{
 // Incomplete declarations
 struct InputArgs;
 struct StateVarsOutStruct;
+struct SingleStateStruct;
 struct FinalStateStruct;
+struct InitialStateStruct;
 struct OutputVarsStruct;
 
 
@@ -301,7 +304,7 @@ struct InternalVars{
 			DoSparseOutput(StateOut, OutVars);
 		}
 	}
-	void DoFinalOutput(FinalStateStruct &FinalStateOut);
+	void DoSingleStateOutput(SingleStateStruct &FinalStateOut);
 private:
 	void DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars);
 	void DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars);
@@ -340,8 +343,7 @@ struct StateVarsOutStruct{
 
 	void initialize(const InternalVars &);
 };
-
-struct FinalStateStruct{
+struct SingleStateStruct{
 	MexVector<float> Weight;
 	MexVector<float> V;
 	MexVector<float> U;
@@ -352,7 +354,7 @@ struct FinalStateStruct{
 	int Time;
 	int CurrentQIndex;
 
-	FinalStateStruct() :
+	SingleStateStruct() :
 		Weight(),
 		V(),
 		U(),
@@ -360,9 +362,15 @@ struct FinalStateStruct{
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
-
+	virtual void initialize(const InternalVars &) {}
+};
+struct FinalStateStruct : public SingleStateStruct{
 	void initialize(const InternalVars &);
-};	
+};
+
+struct InitialStateStruct : public SingleStateStruct{
+	void initialize(const InternalVars &);
+};
 
 void CountingSort(int N, MexVector<Synapse> &Network, MexVector<int> &indirection);
 
@@ -370,6 +378,7 @@ void SimulateParallel(
 	InputArgs &&InputArguments,
 	OutputVarsStruct &PureOutputs,
 	StateVarsOutStruct &StateVarsOutput,
-	FinalStateStruct &FinalStateOutput);
+	FinalStateStruct &FinalStateOutput,
+	InitialStateStruct &InitalStateOutput);
 
 #endif

@@ -23,6 +23,8 @@ int getOutputControl(char* OutputControlSequence){
 			AddorRemove = false;
 			SequenceWord++;
 		}
+		if (!_strcmpi(SequenceWord, "Init"))
+			OutputControl |= OutOps::INITIAL_STATE_REQ;
 		if (AddorRemove && !_strcmpi(SequenceWord, "VCF"))
 			OutputControl |= OutOps::VOUT_REQ | OutOps::UOUT_REQ | OutOps::IOUT_REQ
 		                   | OutOps::FINAL_STATE_REQ;
@@ -324,7 +326,7 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	return ReturnPointer;
 }
 
-mxArray* putFinalStatetoMatlabStruct(FinalStateStruct &FinalStateList){
+mxArray* putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 	const char *FieldNames[] = {
 		"V",
 		"I",
@@ -342,27 +344,27 @@ mxArray* putFinalStatetoMatlabStruct(FinalStateStruct &FinalStateList){
 	mxArray * ReturnPointer = mxCreateStructArray_730(2, StructArraySize, NFields, FieldNames);
 
 	// Assigning vout, Uout, Iout, TimeOut
-	mxSetField(ReturnPointer, 0, "V"                 , assignmxArray(FinalStateList.V, mxSINGLE_CLASS));
-	mxSetField(ReturnPointer, 0, "U"                 , assignmxArray(FinalStateList.U, mxSINGLE_CLASS));
-	mxSetField(ReturnPointer, 0, "I"                 , assignmxArray(FinalStateList.I, mxSINGLE_CLASS));
-	if (FinalStateList.Time >= 0)
-		mxSetField(ReturnPointer, 0, "Time"          , assignmxArray(FinalStateList.Time, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "V"                 , assignmxArray(SingleStateList.V, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "U"                 , assignmxArray(SingleStateList.U, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "I"                 , assignmxArray(SingleStateList.I, mxSINGLE_CLASS));
+	if (SingleStateList.Time >= 0)
+		mxSetField(ReturnPointer, 0, "Time"          , assignmxArray(SingleStateList.Time, mxINT32_CLASS));
 	else
-		mxSetField(ReturnPointer, 0, "Time"          , mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL));
+		mxSetField(ReturnPointer, 0, "Time"          , mxCreateNumericMatrix(0, 0, mxINT32_CLASS, mxREAL));
 
 	// Assigning WeightOut
-	mxSetField(ReturnPointer, 0, "Weight"            , assignmxArray(FinalStateList.Weight, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Weight"            , assignmxArray(SingleStateList.Weight, mxSINGLE_CLASS));
 
 	// Assigning Spike Queue Related Shiz
-	if (FinalStateList.CurrentQIndex >= 0)
-		mxSetField(ReturnPointer, 0, "CurrentQIndex" , assignmxArray(FinalStateList.CurrentQIndex, mxSINGLE_CLASS));
+	if (SingleStateList.CurrentQIndex >= 0)
+		mxSetField(ReturnPointer, 0, "CurrentQIndex" , assignmxArray(SingleStateList.CurrentQIndex, mxINT32_CLASS));
 	else
-		mxSetField(ReturnPointer, 0, "CurrentQIndex" , mxCreateNumericMatrix(0, 0, mxSINGLE_CLASS, mxREAL));
-	mxSetField(ReturnPointer, 0, "SpikeQueue"        , assignmxArray(FinalStateList.SpikeQueue, mxSINGLE_CLASS));
+		mxSetField(ReturnPointer, 0, "CurrentQIndex" , mxCreateNumericMatrix(0, 0, mxINT32_CLASS, mxREAL));
+	mxSetField(ReturnPointer, 0, "SpikeQueue"        , assignmxArray(SingleStateList.SpikeQueue, mxINT32_CLASS));
 
 	// Assigning Last Spiked Time related information
-	mxSetField(ReturnPointer, 0, "LSTNeuron"         , assignmxArray(FinalStateList.LSTNeuron, mxSINGLE_CLASS));
-	mxSetField(ReturnPointer, 0, "LSTSyn"            , assignmxArray(FinalStateList.LSTSyn, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "LSTNeuron"         , assignmxArray(SingleStateList.LSTNeuron, mxINT32_CLASS));
+	mxSetField(ReturnPointer, 0, "LSTSyn"            , assignmxArray(SingleStateList.LSTSyn, mxINT32_CLASS));
 
 	return ReturnPointer;
 }
@@ -378,6 +380,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 	OutputVarsStruct PureOutput;
 	StateVarsOutStruct StateVarsOutput;
 	FinalStateStruct FinalStateOutput;
+	InitialStateStruct InitialStateOutput;
 	// Declaring Final State output vectors
 	
 	// Running Simulation Function.
@@ -386,7 +389,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 		move(InputArgList),
 		PureOutput,
 		StateVarsOutput,
-		FinalStateOutput);
+		FinalStateOutput,
+		InitialStateOutput);
 	chrono::system_clock::time_point TEnd = chrono::system_clock::now();
 	mexPrintf("The Time taken = %d milliseconds", chrono::duration_cast<chrono::milliseconds>(TEnd - TStart).count());
 	mexEvalString("drawnow");
@@ -396,6 +400,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 	
 	plhs[0] = putOutputToMatlabStruct(PureOutput);
 	plhs[1] = putStateToMatlabStruct(StateVarsOutput);
-	plhs[2] = putFinalStatetoMatlabStruct(FinalStateOutput);
+	plhs[2] = putSingleStatetoMatlabStruct(FinalStateOutput);
+
+	if (nlhs == 4){
+		plhs[3] = putSingleStatetoMatlabStruct(InitialStateOutput);
+	}
 	NFields = 15;
 }

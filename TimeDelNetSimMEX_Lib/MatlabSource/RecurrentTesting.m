@@ -58,7 +58,7 @@ InputList.Weight = single(Weights);
 InputList.Delay  = single(Delays);
 
 InputList.onemsbyTstep          = int32(4);
-InputList.NoOfms                = int32(3000);
+InputList.NoOfms                = int32(200);
 InputList.DelayRange            = int32(RecurrentNetParams.DelayRange);
 InputList.StorageStepSize       = int32(0);
 InputList.OutputControl         = strjoin(OutputOptions);
@@ -66,7 +66,7 @@ InputList.StatusDisplayInterval = int32(600);
 
 tic;
 try 
-	[OutputVar2, StateVars2, FinalState2] = TimeDelNetSimMEX_Lib(InputList);
+	[OutputVar2, StateVars2, FinalState2, InitState2] = TimeDelNetSimMEX_Lib(InputList);
 catch e
 	clear functions;
 	throw(e);

@@ -167,7 +167,6 @@ void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
 	if (OutputControl & OutOps::CURRENT_QINDS_REQ)
 		CurrentQIndexOut = MexVector<int>(TimeDimLen);
 }
-
 void OutputVarsStruct::initialize(const InternalVars &IntVars){
 	int TimeDimLen;
 	int onemsbyTstep = IntVars.onemsbyTstep;
@@ -203,9 +202,28 @@ void FinalStateStruct::initialize(const InternalVars &IntVars){
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
-		this->CurrentQIndex = -1;
-		this->Time = -1;
 	}
+	this->CurrentQIndex = -1;
+	this->Time = -1;
+}
+void InitialStateStruct::initialize(const InternalVars &IntVars){
+	int OutputControl = IntVars.OutputControl;
+	int DelayRange = IntVars.DelayRange;
+	int onemsbyTstep = IntVars.onemsbyTstep;
+	int N = IntVars.N;
+	int M = IntVars.M;
+
+	if (OutputControl & OutOps::INITIAL_STATE_REQ){
+		this->V = MexVector<float>(N);
+		this->U = MexVector<float>(N);
+		this->I = MexVector<float>(N);
+		this->Weight = MexVector<float>(M);
+		this->LSTNeuron = MexVector<int>(N);
+		this->LSTSyn = MexVector<int>(M);
+		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
+	}
+	this->CurrentQIndex = -1;
+	this->Time = -1;
 }
 void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
 
@@ -284,7 +302,7 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 			StateOut.LSTSynOut[CurrentInsertPos] = LSTSyn;
 	}
 }
-void InternalVars::DoFinalOutput(FinalStateStruct &FinalStateOut){
+void InternalVars::DoSingleStateOutput(SingleStateStruct &FinalStateOut){
 	int QueueSize = onemsbyTstep * DelayRange;
 	for (int j = 0; j < N; ++j){
 		FinalStateOut.I[j] = Iext[j] + (float)Iin[j] / (1 << 17);
@@ -307,7 +325,8 @@ void SimulateParallel(
 	InputArgs &&InputArguments,
 	OutputVarsStruct &PureOutputs,
 	StateVarsOutStruct &StateVarsOutput,
-	FinalStateStruct &FinalStateOutput
+	FinalStateStruct &FinalStateOutput,
+	InitialStateStruct &InitialStateOutput
 )
 {
 	// Aliasing Input Arguments Into Appropriate
@@ -316,6 +335,7 @@ void SimulateParallel(
 	// Initialization and aliasing of All the input / State variables.
 	InternalVars IntVars(InputArguments);
 
+	// Aliasing of Data members in IntVar
 	MexVector<Synapse>			&Network				= IntVars.Network;
 	MexVector<Neuron>			&Neurons				= IntVars.Neurons;
 	MexVector<float>			&Vnow					= IntVars.V;
@@ -326,7 +346,7 @@ void SimulateParallel(
 	MexVector<MexVector<int> >	&SpikeQueue				= IntVars.SpikeQueue;
 	MexVector<int>				&LastSpikedTimeNeuron	= IntVars.LSTNeuron;
 	MexVector<int>				&LastSpikedTimeSyn		= IntVars.LSTSyn;
-
+	
 	int &NoOfms				= IntVars.NoOfms;
 	int &onemsbyTstep		= IntVars.onemsbyTstep;
 	int Tbeg				= IntVars.Time;				//Tbeg is just an initial constant, 
@@ -338,16 +358,26 @@ void SimulateParallel(
 	int &i					= IntVars.i;
 
 	const int &StatusDisplayInterval = IntVars.StatusDisplayInterval;
-	size_t QueueSize = SpikeQueue.size();
 
+	// other data members. probably derived from inputs or something
+	// I think should be a constant. (note that it is possible that 
+	// I club some of these with the inputs in future revisions like
+	// CurrentDecayFactor
+
+	size_t QueueSize = SpikeQueue.size();
 	int nSteps = NoOfms*onemsbyTstep;
 	size_t N = InputArguments.Neurons.size(), M = InputArguments.Network.size();
 
-	const int I0 = 1;           // Value of the current factor to be multd with weights
-	
-	// VARIOuS ARRAYS USED apart from those in the argument list
-	MexVector<int> PrevFiredNeurons;                // Maintains a 'list' of previously fired neuron indices 
-	                                                // in sequence of their index
+	float I0 = 1;           // Value of the current factor to be multd with weights (constant)
+	float CurrentDecayFactor;					//Current Decay Factor in the current model (possibly input in future)
+	CurrentDecayFactor = powf(7.0f / 10, 1.0f / onemsbyTstep);
+
+	// VARIOuS ARRAYS USED apart from those in the argument list and Output List.
+	// Id like to call them intermediate arrays, required for simulation but are
+	// not state, input or output vectors.
+	// they are typically of the form of some processed version of an input vector
+	// thus they dont change with time and are prima facie not used to generate output
+
 	MexVector<int> AuxArray(M);					    // Auxillary Array that is an indirection between Network
 												    // and an array sorted lexicographically by (NEnd, NStart)
 	MexVector<size_t> PreSynNeuronSectionBeg(N, -1);	// PreSynNeuronSectionBeg[j] Maintains the list of the 
@@ -361,20 +391,6 @@ void SimulateParallel(
 	MexVector<size_t> PostSynNeuronSectionEnd(N, -1);	// PostSynNeuronSectionEnd[j] Maintains the list of the 
 														// indices one greater than index of the last synapse in 
 														// AuxArray with NEnd = j+1
-
-	float CurrentDecayFactor;					//Current Decay Factor in the current model
-	CurrentDecayFactor = powf(7.0f / 10, 1.0f / onemsbyTstep);
-	//----------------------------------------------------------------------------------------------//
-	//--------------------------------- Initializing output Arrays ---------------------------------//
-	//----------------------------------------------------------------------------------------------//
-
-	StateVarsOutput.initialize(IntVars);
-	PureOutputs.initialize(IntVars);
-	FinalStateOutput.initialize(IntVars);
-
-	//----------------------- Initializing Finaloutput Arrays--------------------------------------//
-	
-
 	// NAdditionalSpikesNow - A vector of atomic integers that stores the number 
 	//              of spikes generated corresponding to each of the sub-vectors 
 	//              above. Used to reallocate memory before parallelization of 
@@ -387,13 +403,17 @@ void SimulateParallel(
 
 	atomicIntVect NAdditionalSpikesNow(onemsbyTstep * DelayRange);
 	atomicIntVect CurrentSpikeLoadingInd(onemsbyTstep * DelayRange);
+	
+	//----------------------------------------------------------------------------------------------//
+	//--------------------------------- Initializing output Arrays ---------------------------------//
+	//----------------------------------------------------------------------------------------------//
 
-	// CurrentQueueIndex (Argument) - The index in SpikeQueue which corresponds to the 
-	//              vector of spikes which are to arrive (i.e.  be processed) 
-	//              in the current time instant
-	// 
-	// QueueSize - No of subvectors (i.e. delay slots) in SpikeQueue
-
+	StateVarsOutput.initialize(IntVars);
+	PureOutputs.initialize(IntVars);
+	FinalStateOutput.initialize(IntVars);
+	InitialStateOutput.initialize(IntVars);
+	
+	//---------------------------- Initializing the Intermediate Arrays ----------------------------//
 	CountingSort(N, Network, AuxArray);	// Perform counting sort by (NEnd, NStart)
 	                                    // to get AuxArray
 
@@ -432,11 +452,19 @@ void SimulateParallel(
 		The vector corresponding to the spikes processed in the current 
 		iteration is cleared after the calculation of Itemp
 	*/
+	// Giving Initial State if Asked For
+	if (OutputControl & OutOps::INITIAL_STATE_REQ){
+		IntVars.DoSingleStateOutput(InitialStateOutput);
+	}
 	size_t maxSpikeno = 0;
 	tbb::affinity_partitioner apCurrentUpdate;
 	tbb::affinity_partitioner apNeuronSim;
 	int TotalStorageStepSize = (StorageStepSize*onemsbyTstep); // used everywhere
 	int epilepsyctr = 0;
+
+	// ------------------------------------------------------------------------------ //
+	// ------------------------------ Simulation Loop ------------------------------- //
+	// ------------------------------------------------------------------------------ //
 	for (i = 1; i<=nSteps; ++i){
 		
 		InputArgs::IExtFunc(time*0.001f/onemsbyTstep, Iext);
@@ -450,8 +478,7 @@ void SimulateParallel(
 		size_t QueueSubEnd = SpikeQueue[CurrentQueueIndex].size();
 		maxSpikeno += QueueSubEnd;
 		// Epilepsy Check
-		if (QueueSubEnd > (2*M) / (5))
-		{
+		if (QueueSubEnd > (2*M) / (5)){
 			epilepsyctr++;
 			if (epilepsyctr > 100){
 			#ifdef MEX_LIB
@@ -462,6 +489,7 @@ void SimulateParallel(
 				return;
 			}
 		}
+
 		// This iter calculates Itemp as in above diagram
 		if (SpikeQueue[CurrentQueueIndex].size() != 0)
 			tbb::parallel_for(tbb::blocked_range<int*>((int*)&SpikeQueue[CurrentQueueIndex][0],
@@ -496,6 +524,7 @@ void SimulateParallel(
 
 		IntVars.DoStateOutput(StateVarsOutput, PureOutputs);
 
+		// Status Display Section
 		if (!(i % StatusDisplayInterval)){
 		#ifdef MEX_LIB
 			mexPrintf("Completed  %d steps with Total no. of Spikes = %d\n", i, maxSpikeno);
@@ -507,7 +536,7 @@ void SimulateParallel(
 		}
 	}
 	if ((OutputControl & OutOps::FINAL_STATE_REQ)){
-		IntVars.DoFinalOutput(FinalStateOutput);
+		IntVars.DoSingleStateOutput(FinalStateOutput);
 	}
 }
 
