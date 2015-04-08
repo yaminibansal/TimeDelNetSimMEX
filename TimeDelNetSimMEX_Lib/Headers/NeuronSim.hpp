@@ -16,17 +16,19 @@ using namespace std;
 struct OutOps{
 	enum {
 		V_REQ               = (1 << 0), 
-		I_IN_REQ            = (1 << 1), 
-		TIME_REQ            = (1 << 2), 
-		U_REQ               = (1 << 3), 
-		WEIGHT_REQ          = (1 << 4), 
-		CURRENT_QINDS_REQ   = (1 << 5), 
-		SPIKE_QUEUE_REQ     = (1 << 6), 
-		LASTSPIKED_NEU_REQ  = (1 << 7), 
-		LASTSPIKED_SYN_REQ  = (1 << 8), 
-		I_TOT_REQ           = (1 << 9), 
-		INITIAL_STATE_REQ   = (1 << 10), 
-		FINAL_STATE_REQ     = (1 << 11), 
+		I_IN_1_REQ          = (1 << 1), 
+		I_IN_2_REQ          = (1 << 2), 
+		TIME_REQ            = (1 << 3), 
+		U_REQ               = (1 << 4), 
+		WEIGHT_REQ          = (1 << 5), 
+		CURRENT_QINDS_REQ   = (1 << 6), 
+		SPIKE_QUEUE_REQ     = (1 << 7), 
+		LASTSPIKED_NEU_REQ  = (1 << 8), 
+		LASTSPIKED_SYN_REQ  = (1 << 9), 
+		I_IN_REQ            = (1 << 10), 
+		I_TOT_REQ           = (1 << 11), 
+		INITIAL_STATE_REQ   = (1 << 12), 
+		FINAL_STATE_REQ     = (1 << 13)
 	};
 };
 
@@ -37,17 +39,20 @@ struct CurrentUpdate
 {
 	MexVector<int> & SpikeList;
 	MexVector<Synapse> &Network;
-	atomicLongVect &Iin;
+	atomicLongVect &Iin1;
+	atomicLongVect &Iin2;
 	MexVector<int> &LastSpikedTimeSyn;
 	int time;
 	float I0;
 	CurrentUpdate(MexVector<int> &SpikeList_,
 		MexVector<Synapse> &Network_,
-		atomicLongVect &Iin_,
+		atomicLongVect &Iin1_,
+		atomicLongVect &Iin2_,
 		MexVector<int> &LastSpikedTimeSyn_, float I0_, int time_) :
 		SpikeList(SpikeList_),
 		Network(Network_),
-		Iin(Iin_),
+		Iin1(Iin1_),
+		Iin2(Iin2_),
 		LastSpikedTimeSyn(LastSpikedTimeSyn_),
 		I0(I0_),
 		time(time_){};
@@ -56,7 +61,8 @@ struct CurrentUpdate
 struct NeuronSimulate{
 	MexVector<float> &Vnow;
 	MexVector<float> &Unow;
-	atomicLongVect &Iin;
+	atomicLongVect &Iin1;
+	atomicLongVect &Iin2;
 	MexVector<float> &Iext;
 	MexVector<Neuron> &Neurons;
 	MexVector<Synapse> &Network;
@@ -70,12 +76,13 @@ struct NeuronSimulate{
 	NeuronSimulate(
 		MexVector<float> &Vnow_,
 		MexVector<float> &Unow_,
-		atomicLongVect &Iin_,
+		atomicLongVect &Iin1_,
+		atomicLongVect &Iin2_,
 		MexVector<float> &Iext_,
 		MexVector<Neuron> &Neurons_,
 		MexVector<Synapse> &Network_,
 		int CurrentQueueIndex_, int QueueSize_, int onemsbyTstep_,
-		float CurrentDecayFactor_, int time_,
+		int time_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		atomicIntVect &NAdditionalSpikesNow_,
@@ -83,12 +90,13 @@ struct NeuronSimulate{
 		) :
 		Vnow(Vnow_),
 		Unow(Unow_),
-		Iin(Iin_),
+		Iin1(Iin1_),
+		Iin2(Iin2_),
 		Iext(Iext_),
 		Neurons(Neurons_),
 		Network(Network_),
 		CurrentQueueIndex(CurrentQueueIndex_), QueueSize(QueueSize_), onemsbyTstep(onemsbyTstep_),
-		CurrentDecayFactor(CurrentDecayFactor_), time(time_),
+		time(time_),
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
 		NAdditionalSpikesNow(NAdditionalSpikesNow_),
@@ -127,14 +135,20 @@ struct SpikeRecord{
 };
 
 struct CurrentAttenuate{
-	atomicLongVect &Iin;
-	float attenFactor;
+	atomicLongVect &Iin1;
+	atomicLongVect &Iin2;
+	float attenFactor1;
+	float attenFactor2;
 
 	CurrentAttenuate(
-		atomicLongVect &Iin_,
-		float attenFactor_) :
-		Iin(Iin_),
-		attenFactor(attenFactor_) {}
+		atomicLongVect &Iin1_,
+		atomicLongVect &Iin2_,
+		float attenFactor1_,
+		float attenFactor2_) :
+		Iin1(Iin1_),
+		Iin2(Iin2_),
+		attenFactor1(attenFactor1_),
+		attenFactor2(attenFactor2_){}
 
 	void operator() (tbb::blocked_range<int> &Range) const; 
 };
@@ -155,7 +169,8 @@ struct InputArgs{
 	MexVector<int> InterestingSyns;
 	MexVector<float> V;
 	MexVector<float> U;
-	MexVector<float> Iin;
+	MexVector<float> Iin1;
+	MexVector<float> Iin2;
 	MexVector<MexVector<int> > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
@@ -174,7 +189,8 @@ struct InputArgs{
 		InterestingSyns(),
 		V(),
 		U(),
-		Iin(),
+		Iin1(),
+		Iin2(),
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
@@ -202,7 +218,8 @@ struct InternalVars{
 	MexVector<int> &InterestingSyns;
 	MexVector<float> &V;
 	MexVector<float> &U;
-	atomicLongVect Iin;
+	atomicLongVect Iin1;
+	atomicLongVect Iin2;
 	MexVector<float> Iext;
 	MexVector<MexVector<int> > &SpikeQueue;
 	MexVector<int> &LSTNeuron;
@@ -223,7 +240,8 @@ struct InternalVars{
 		InterestingSyns(IArgs.InterestingSyns),
 		V(IArgs.V),
 		U(IArgs.U),
-		Iin(N),	// Iin is defined separately as an atomic vect.
+		Iin1(N),	// Iin is defined separately as an atomic vect.
+		Iin2(N),
 		Iext(N, 0.0f),
 		SpikeQueue(IArgs.SpikeQueue),
 		LSTNeuron(IArgs.LSTNeuron),
@@ -233,7 +251,7 @@ struct InternalVars{
 		DelayRange(IArgs.DelayRange) {
 		// Setting value of beta
 		if (StorageStepSize)
-			beta = (onemsbyTstep * NoOfms) - StorageStepSize % (onemsbyTstep * NoOfms);
+			beta = (onemsbyTstep * StorageStepSize) - Time % (onemsbyTstep * StorageStepSize);
 		else
 			beta = 0;
 
@@ -259,18 +277,32 @@ struct InternalVars{
 			return;
 		}
 
-		// Setting Initial Conditions for INTERNAL CURRENT
-		if (IArgs.Iin.size() == N){
+		// Setting Initial Conditions for INTERNAL CURRENT 1
+		if (IArgs.Iin1.size() == N){
 			for (int i = 0; i < N; ++i){
-				Iin[i] = (long long int)(IArgs.Iin[i] * (1 << 17));
+				Iin1[i] = (long long int)(IArgs.Iin1[i] * (1 << 17));
 			}
 		}
-		else if (IArgs.Iin.size()){
+		else if (IArgs.Iin1.size()){
 			// GIVE ERROR MESSAGE HERE
 			return;
 		}
 		//else{
-		//	I is already initialized to zero by tbb::zero_allocator<long long>
+		//	Iin1 is already initialized to zero by tbb::zero_allocator<long long>
+		//}
+
+		// Setting Initial Conditions for INTERNAL CURRENT 2
+		if (IArgs.Iin2.size() == N){
+			for (int i = 0; i < N; ++i){
+				Iin2[i] = (long long int)(IArgs.Iin2[i] * (1 << 17));
+			}
+		}
+		else if (IArgs.Iin2.size()){
+			// GIVE ERROR MESSAGE HERE
+			return;
+		}
+		//else{
+		//	Iin2 is already initialized to zero by tbb::zero_allocator<long long>
 		//}
 
 		// Setting Initial Conditions of SpikeQueue
@@ -312,10 +344,13 @@ private:
 
 struct OutputVarsStruct{
 	MexMatrix<float> WeightOut;
+	MexMatrix<float> Iin;
 	MexMatrix<float> Itot;
 
 	OutputVarsStruct() :
-		WeightOut() {}
+		WeightOut(),
+		Itot(),
+		Iin() {}
 
 	void initialize(const InternalVars &);
 };
@@ -324,7 +359,8 @@ struct StateVarsOutStruct{
 	MexMatrix<float> WeightOut;
 	MexMatrix<float> VOut;
 	MexMatrix<float> UOut;
-	MexMatrix<float> IinOut;
+	MexMatrix<float> Iin1Out;
+	MexMatrix<float> Iin2Out;
 	MexVector<int> TimeOut;
 	MexVector<MexVector<MexVector<int> > > SpikeQueueOut;
 	MexVector<int> CurrentQIndexOut;
@@ -335,7 +371,8 @@ struct StateVarsOutStruct{
 		WeightOut(),
 		VOut(),
 		UOut(),
-		IinOut(),
+		Iin1Out(),
+		Iin2Out(),
 		TimeOut(),
 		SpikeQueueOut(),
 		CurrentQIndexOut(),
@@ -348,7 +385,8 @@ struct SingleStateStruct{
 	MexVector<float> Weight;
 	MexVector<float> V;
 	MexVector<float> U;
-	MexVector<float> Iin;
+	MexVector<float> Iin1;
+	MexVector<float> Iin2;
 	MexVector<MexVector<int > > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
@@ -359,7 +397,8 @@ struct SingleStateStruct{
 		Weight(),
 		V(),
 		U(),
-		Iin(),
+		Iin1(),
+		Iin2(),
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}

@@ -15,9 +15,9 @@ RecurrentNetParams.NInh = round(N - N*E);
 
 RecurrentNetParams.NSynExctoExc = 1000;
 RecurrentNetParams.NSynExctoInh = 300;
-RecurrentNetParams.NSynInhtoExc = 1600;
+RecurrentNetParams.NSynInhtoExc = 500;
 
-RecurrentNetParams.MeanExctoExc = 0.3;
+RecurrentNetParams.MeanExctoExc = 0.1;
 RecurrentNetParams.MeanExctoInh = 0.09;
 RecurrentNetParams.MeanInhtoExc = -1;
 
@@ -40,7 +40,12 @@ d(Ninh) = 2;
 
 %% Input setup
 % Setting up input settings
-OutputOptions = {'VCF'};
+OutputOptions = {
+	'V', ...
+	'Iin1', ...
+	'Iin2', ...
+	'Final' ...
+};
 
 % Clearing InputList
 clear InputList;

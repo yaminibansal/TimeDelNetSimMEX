@@ -33,7 +33,8 @@ int getOutputControl(char* OutputControlSequence){
 			               | OutOps::WEIGHT_REQ
 			               | OutOps::FINAL_STATE_REQ;
 		if (AddorRemove && !_strcmpi(SequenceWord, "FSF"))
-			OutputControl |= OutOps::V_REQ | OutOps::U_REQ | OutOps::I_IN_REQ
+			OutputControl |= OutOps::V_REQ | OutOps::U_REQ 
+						   | OutOps::I_IN_1_REQ | OutOps::I_IN_2_REQ
 			               | OutOps::WEIGHT_REQ
 						   | OutOps::CURRENT_QINDS_REQ
 						   | OutOps::SPIKE_QUEUE_REQ
@@ -48,10 +49,14 @@ int getOutputControl(char* OutputControlSequence){
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::U_REQ : 
 					 OutputControl & ~(OutOps::U_REQ);
-		if (!_strcmpi(SequenceWord, "Iin"))
+		if (!_strcmpi(SequenceWord, "Iin1"))
 			OutputControl = AddorRemove ? 
-			         OutputControl | OutOps::I_IN_REQ : 
-					 OutputControl & ~(OutOps::I_IN_REQ);
+			         OutputControl | OutOps::I_IN_1_REQ : 
+					 OutputControl & ~(OutOps::I_IN_1_REQ);
+		if (!_strcmpi(SequenceWord, "Iin2"))
+			OutputControl = AddorRemove ? 
+			         OutputControl | OutOps::I_IN_2_REQ : 
+					 OutputControl & ~(OutOps::I_IN_2_REQ);
 		if (!_strcmpi(SequenceWord, "Weight"))
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::WEIGHT_REQ : 
@@ -72,6 +77,10 @@ int getOutputControl(char* OutputControlSequence){
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::LASTSPIKED_SYN_REQ : 
 					 OutputControl & ~(OutOps::LASTSPIKED_SYN_REQ);
+		if (!_strcmpi(SequenceWord, "Iin"))
+			OutputControl = AddorRemove ? 
+			         OutputControl | OutOps::I_IN_REQ : 
+					 OutputControl & ~(OutOps::I_IN_REQ);
 		if (!_strcmpi(SequenceWord, "Itot"))
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::I_TOT_REQ : 
@@ -159,7 +168,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		InputArgList.InterestingSyns.copyArray(0, genIntPtr[0], NumElems);
 	}
 
-	// Initializing V0, U0 and Iin0
+	// Initializing V, U and Iin1, Iin2
 	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "V");
 	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
 		InputArgList.V = MexVector<float>(N);
@@ -172,17 +181,23 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
 		InputArgList.U.copyArray(0, genFloatPtr[0], N);
 	}
-	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "Iin");
+	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "Iin1");
 	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
-		InputArgList.Iin = MexVector<float>(N);
+		InputArgList.Iin1 = MexVector<float>(N);
 		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
-		InputArgList.Iin.copyArray(0, genFloatPtr[0], N);
+		InputArgList.Iin1.copyArray(0, genFloatPtr[0], N);
+	}
+	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "Iin2");
+	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
+		InputArgList.Iin2 = MexVector<float>(N);
+		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
+		InputArgList.Iin2.copyArray(0, genFloatPtr[0], N);
 	}
 
 	// Initializing CurrentQueueIndex
 	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "CurrentQIndex");
 	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr))
-		InputArgList.CurrentQIndex = *reinterpret_cast<int *>(genmxArrayPtr);
+		InputArgList.CurrentQIndex = *reinterpret_cast<int *>(mxGetData(genmxArrayPtr));
 
 	// Initializing InitSpikeQueue
 	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "SpikeQueue");
@@ -280,17 +295,21 @@ template<typename T> mxArray * assignmxArray(MexVector<MexVector<T> > &VectorOut
 mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 	const char *FieldNames[] = { 
 		"WeightOut",
-		"Itot"
+		"Iin",
+		"Itot",
+		nullptr
 	};
 
-	int NFields = 2;
+	int NFields = 0;
+	for (; FieldNames[NFields] != nullptr; ++NFields);
 	mwSize StructArraySize[2] = { 1, 1 };
 
 	mxArray * ReturnPointer = mxCreateStructArray_730(2, StructArraySize, NFields, FieldNames);
 	
 	// Assigning Weightout
 	mxSetField(ReturnPointer, 0, "WeightOut", assignmxArray(Output.WeightOut, mxSINGLE_CLASS));
-
+	// Assigning Iin
+	mxSetField(ReturnPointer, 0, "Iin", assignmxArray(Output.Iin, mxSINGLE_CLASS));
 	// Assigning Itot
 	mxSetField(ReturnPointer, 0, "Itot", assignmxArray(Output.Itot, mxSINGLE_CLASS));
 
@@ -300,16 +319,19 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	const char *FieldNames[] = {
 		"V",
-		"Iin",
+		"Iin1",
+		"Iin2",
 		"Time",
 		"U",
 		"Weight",
 		"CurrentQIndex",
 		"SpikeQueue",
 		"LSTNeuron",
-		"LSTSyn"
+		"LSTSyn",
+		nullptr
 	};
-	int NFields = 9;
+	int NFields = 0;
+	for (; FieldNames[NFields] != nullptr; ++NFields);
 	mwSize StructArraySize[2] = { 1, 1 };
 
 	mxArray * ReturnPointer = mxCreateStructArray_730(2, StructArraySize, NFields, FieldNames);
@@ -317,7 +339,8 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	// Assigning V, U, I, Time
 	mxSetField(ReturnPointer, 0, "V"             , assignmxArray(Output.VOut, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "U"             , assignmxArray(Output.UOut, mxSINGLE_CLASS));
-	mxSetField(ReturnPointer, 0, "Iin"           , assignmxArray(Output.IinOut, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Iin1"          , assignmxArray(Output.Iin1Out, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Iin2"          , assignmxArray(Output.Iin2Out, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "Time"          , assignmxArray(Output.TimeOut, mxINT32_CLASS));
 
 	// Assigning Weight
@@ -339,16 +362,19 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 	const char *FieldNames[] = {
 		"V",
-		"Iin",
+		"Iin1",
+		"Iin2",
 		"Time",
 		"U",
 		"Weight",
 		"CurrentQIndex",
 		"SpikeQueue",
 		"LSTNeuron",
-		"LSTSyn"
+		"LSTSyn",
+		nullptr
 	};
-	int NFields = 9;
+	int NFields = 0;
+	for (; FieldNames[NFields] != nullptr; ++NFields);
 	mwSize StructArraySize[2] = { 1, 1 };
 
 	mxArray * ReturnPointer = mxCreateStructArray_730(2, StructArraySize, NFields, FieldNames);
@@ -356,7 +382,8 @@ mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 	// Assigning vout, Uout, Iout, TimeOut
 	mxSetField(ReturnPointer, 0, "V"                 , assignmxArray(SingleStateList.V, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "U"                 , assignmxArray(SingleStateList.U, mxSINGLE_CLASS));
-	mxSetField(ReturnPointer, 0, "Iin"               , assignmxArray(SingleStateList.Iin, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Iin1"              , assignmxArray(SingleStateList.Iin1, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Iin2"              , assignmxArray(SingleStateList.Iin2, mxSINGLE_CLASS));
 	if (SingleStateList.Time >= 0)
 		mxSetField(ReturnPointer, 0, "Time"          , assignmxArray(SingleStateList.Time, mxINT32_CLASS));
 	else
@@ -406,7 +433,6 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 	mexEvalString("drawnow");
 
 	mwSize StructArraySize[2] = { 1, 1 };
-	int NFields = 10;
 	
 	plhs[0] = putOutputToMatlabStruct(PureOutput);
 	plhs[1] = putStateToMatlabStruct(StateVarsOutput);
@@ -415,5 +441,4 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 	if (nlhs == 4){
 		plhs[3] = putSingleStatetoMatlabStruct(InitialStateOutput);
 	}
-	NFields = 15;
 }
