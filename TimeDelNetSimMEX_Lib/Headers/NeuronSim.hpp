@@ -2,9 +2,11 @@
 #define NEURONSIM_HPP
 #include "Network.hpp"
 #include "MexMem.hpp"
+#include "FiltRandomTBB.hpp"
 #include <mex.h>
 #include <matrix.h>
 #include <xutility>
+#include <stdint.h>
 #include <vector>
 #include <tbb\atomic.h>
 #include <tbb\parallel_for.h>
@@ -18,17 +20,19 @@ struct OutOps{
 		V_REQ               = (1 << 0), 
 		I_IN_1_REQ          = (1 << 1), 
 		I_IN_2_REQ          = (1 << 2), 
-		TIME_REQ            = (1 << 3), 
-		U_REQ               = (1 << 4), 
-		WEIGHT_REQ          = (1 << 5), 
-		CURRENT_QINDS_REQ   = (1 << 6), 
-		SPIKE_QUEUE_REQ     = (1 << 7), 
-		LASTSPIKED_NEU_REQ  = (1 << 8), 
-		LASTSPIKED_SYN_REQ  = (1 << 9), 
-		I_IN_REQ            = (1 << 10), 
-		I_TOT_REQ           = (1 << 11), 
-		INITIAL_STATE_REQ   = (1 << 12), 
-		FINAL_STATE_REQ     = (1 << 13)
+		I_IN_REQ            = (1 << 3), 
+		I_RAND_REQ          = (1 << 4), 
+		GEN_STATE_REQ       = (1 << 5), 
+		TIME_REQ            = (1 << 6), 
+		U_REQ               = (1 << 7), 
+		WEIGHT_REQ          = (1 << 8), 
+		CURRENT_QINDS_REQ   = (1 << 9), 
+		SPIKE_QUEUE_REQ     = (1 << 10), 
+		LASTSPIKED_NEU_REQ  = (1 << 11), 
+		LASTSPIKED_SYN_REQ  = (1 << 12), 
+		I_TOT_REQ           = (1 << 13), 
+		INITIAL_STATE_REQ   = (1 << 14), 
+		FINAL_STATE_REQ     = (1 << 15)
 	};
 };
 
@@ -63,11 +67,12 @@ struct NeuronSimulate{
 	MexVector<float> &Unow;
 	atomicLongVect &Iin1;
 	atomicLongVect &Iin2;
+	MexVector<float> &Irand;
 	MexVector<float> &Iext;
 	MexVector<Neuron> &Neurons;
 	MexVector<Synapse> &Network;
 	int CurrentQueueIndex, QueueSize, onemsbyTstep, time;
-	float CurrentDecayFactor;
+	float StdDev;
 	MexVector<size_t> &PreSynNeuronSectionBeg;
 	MexVector<size_t> &PreSynNeuronSectionEnd;
 	atomicIntVect &NAdditionalSpikesNow;
@@ -78,11 +83,13 @@ struct NeuronSimulate{
 		MexVector<float> &Unow_,
 		atomicLongVect &Iin1_,
 		atomicLongVect &Iin2_,
+		MexVector<float> &Irand_,
 		MexVector<float> &Iext_,
 		MexVector<Neuron> &Neurons_,
 		MexVector<Synapse> &Network_,
 		int CurrentQueueIndex_, int QueueSize_, int onemsbyTstep_,
 		int time_,
+		float StdDev_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		atomicIntVect &NAdditionalSpikesNow_,
@@ -92,11 +99,13 @@ struct NeuronSimulate{
 		Unow(Unow_),
 		Iin1(Iin1_),
 		Iin2(Iin2_),
+		Irand(Irand_),
 		Iext(Iext_),
 		Neurons(Neurons_),
 		Network(Network_),
 		CurrentQueueIndex(CurrentQueueIndex_), QueueSize(QueueSize_), onemsbyTstep(onemsbyTstep_),
 		time(time_),
+		StdDev(StdDev_),
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
 		NAdditionalSpikesNow(NAdditionalSpikesNow_),
@@ -171,6 +180,10 @@ struct InputArgs{
 	MexVector<float> U;
 	MexVector<float> Iin1;
 	MexVector<float> Iin2;
+
+	MexVector<uint32_t> GenState;
+	MexVector<float> Irand;
+	
 	MexVector<MexVector<int> > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
@@ -191,6 +204,8 @@ struct InputArgs{
 		U(),
 		Iin1(),
 		Iin2(),
+		GenState(),
+		Irand(),
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
@@ -209,6 +224,11 @@ struct InternalVars{
 	int NoOfms;
 	int DelayRange;
 	int CurrentQIndex;
+	const float I0;
+	const float CurrentDecayFactor1, CurrentDecayFactor2;
+	const float alpha;
+	const float StdDev;
+
 	int OutputControl;
 	int StorageStepSize;
 	const int StatusDisplayInterval;
@@ -220,6 +240,7 @@ struct InternalVars{
 	MexVector<float> &U;
 	atomicLongVect Iin1;
 	atomicLongVect Iin2;
+	BandLimGaussVect Irand;
 	MexVector<float> Iext;
 	MexVector<MexVector<int> > &SpikeQueue;
 	MexVector<int> &LSTNeuron;
@@ -242,13 +263,21 @@ struct InternalVars{
 		U(IArgs.U),
 		Iin1(N),	// Iin is defined separately as an atomic vect.
 		Iin2(N),
+		Irand(),	// Irand defined separately.
 		Iext(N, 0.0f),
 		SpikeQueue(IArgs.SpikeQueue),
 		LSTNeuron(IArgs.LSTNeuron),
 		LSTSyn(IArgs.LSTSyn),
 		onemsbyTstep(IArgs.onemsbyTstep),
 		NoOfms(IArgs.NoOfms),
-		DelayRange(IArgs.DelayRange) {
+		DelayRange(IArgs.DelayRange),
+		I0(1.0f),
+		CurrentDecayFactor1(powf(7.0f / 10, 1.0f / onemsbyTstep)),
+		CurrentDecayFactor2(powf(7.0f / (10.0f), 1.0f / (4 * onemsbyTstep))),
+		alpha(0.5),
+		StdDev(5)
+		{
+
 		// Setting value of beta
 		if (StorageStepSize)
 			beta = (onemsbyTstep * StorageStepSize) - Time % (onemsbyTstep * StorageStepSize);
@@ -305,6 +334,22 @@ struct InternalVars{
 		//	Iin2 is already initialized to zero by tbb::zero_allocator<long long>
 		//}
 
+		// Setting up IRand and corresponding Random Generators.
+		XorShiftPlus Gen1;
+		XorShiftPlus::StateStruct Gen1State;
+		Gen1State.ConvertVecttoState(IArgs.GenState);
+		Gen1.setstate(Gen1State);
+
+		Irand.configure(Gen1, XorShiftPlus(), alpha);	// second generator is dummy.
+		if (IArgs.Irand.istrulyempty())
+			Irand.resize(N);
+		else if (IArgs.Irand.size() == N)
+			Irand.assign(IArgs.Irand);				// initializing Vector
+		else{
+			// GIVE ERROR MESSAGE HERE
+			return;
+		}
+		
 		// Setting Initial Conditions of SpikeQueue
 		if (SpikeQueue.istrulyempty()){
 			SpikeQueue = MexVector<MexVector<int> >(onemsbyTstep * DelayRange, MexVector<int>());
@@ -361,6 +406,10 @@ struct StateVarsOutStruct{
 	MexMatrix<float> UOut;
 	MexMatrix<float> Iin1Out;
 	MexMatrix<float> Iin2Out;
+
+	MexMatrix<uint32_t> GenStateOut;
+	MexMatrix<float> IrandOut;
+
 	MexVector<int> TimeOut;
 	MexVector<MexVector<MexVector<int> > > SpikeQueueOut;
 	MexVector<int> CurrentQIndexOut;
@@ -373,6 +422,8 @@ struct StateVarsOutStruct{
 		UOut(),
 		Iin1Out(),
 		Iin2Out(),
+		GenStateOut(),
+		IrandOut(),
 		TimeOut(),
 		SpikeQueueOut(),
 		CurrentQIndexOut(),
@@ -387,6 +438,10 @@ struct SingleStateStruct{
 	MexVector<float> U;
 	MexVector<float> Iin1;
 	MexVector<float> Iin2;
+
+	MexVector<uint32_t> GenState;
+	MexVector<float> Irand;
+
 	MexVector<MexVector<int > > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
@@ -399,9 +454,12 @@ struct SingleStateStruct{
 		U(),
 		Iin1(),
 		Iin2(),
+		GenState(),
+		Irand(),
 		SpikeQueue(),
 		LSTNeuron(),
 		LSTSyn() {}
+
 	virtual void initialize(const InternalVars &) {}
 };
 struct FinalStateStruct : public SingleStateStruct{

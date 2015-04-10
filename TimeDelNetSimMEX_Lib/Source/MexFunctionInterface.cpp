@@ -35,6 +35,7 @@ int getOutputControl(char* OutputControlSequence){
 		if (AddorRemove && !_strcmpi(SequenceWord, "FSF"))
 			OutputControl |= OutOps::V_REQ | OutOps::U_REQ 
 						   | OutOps::I_IN_1_REQ | OutOps::I_IN_2_REQ
+						   | OutOps::I_RAND_REQ | OutOps::GEN_STATE_REQ
 			               | OutOps::WEIGHT_REQ
 						   | OutOps::CURRENT_QINDS_REQ
 						   | OutOps::SPIKE_QUEUE_REQ
@@ -57,6 +58,14 @@ int getOutputControl(char* OutputControlSequence){
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::I_IN_2_REQ : 
 					 OutputControl & ~(OutOps::I_IN_2_REQ);
+		if (!_strcmpi(SequenceWord, "Irand"))
+			OutputControl = AddorRemove ? 
+			         OutputControl | OutOps::I_RAND_REQ : 
+					 OutputControl & ~(OutOps::I_RAND_REQ);
+		if (!_strcmpi(SequenceWord, "GenState"))
+			OutputControl = AddorRemove ? 
+			         OutputControl | OutOps::GEN_STATE_REQ : 
+					 OutputControl & ~(OutOps::GEN_STATE_REQ);
 		if (!_strcmpi(SequenceWord, "Weight"))
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::WEIGHT_REQ : 
@@ -110,6 +119,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 
 	float*      genFloatPtr[4];     // Generic float Pointers used around the place to access data
 	int*        genIntPtr[2];       // Generic int Pointers used around the place to access data
+	uint32_t*	genUIntPtr[1];		// Generic unsigned int Pointers used around the place to access data (generator bits)
 	short *     genCharPtr;         // Generic short Pointer used around the place to access data (delays specifically)
 	mxArray *   genmxArrayPtr;      // Generic mxArray Pointer used around the place to access data
 
@@ -192,6 +202,19 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		InputArgList.Iin2 = MexVector<float>(N);
 		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
 		InputArgList.Iin2.copyArray(0, genFloatPtr[0], N);
+	}
+
+	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "Irand");
+	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
+		InputArgList.Irand = MexVector<float>(N);
+		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
+		InputArgList.Irand.copyArray(0, genFloatPtr[0], N);
+	}
+	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "GenState");
+	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
+		InputArgList.GenState = MexVector<uint32_t>(4);
+		genUIntPtr[0] = reinterpret_cast<uint32_t *>(mxGetData(genmxArrayPtr));
+		InputArgList.GenState.copyArray(0, genUIntPtr[0], 4);
 	}
 
 	// Initializing CurrentQueueIndex
@@ -321,6 +344,8 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 		"V",
 		"Iin1",
 		"Iin2",
+		"Irand",
+		"GenState",
 		"Time",
 		"U",
 		"Weight",
@@ -341,6 +366,9 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	mxSetField(ReturnPointer, 0, "U"             , assignmxArray(Output.UOut, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "Iin1"          , assignmxArray(Output.Iin1Out, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "Iin2"          , assignmxArray(Output.Iin2Out, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Irand"         , assignmxArray(Output.IrandOut, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "GenState"      , assignmxArray(Output.GenStateOut, mxUINT32_CLASS));
+
 	mxSetField(ReturnPointer, 0, "Time"          , assignmxArray(Output.TimeOut, mxINT32_CLASS));
 
 	// Assigning Weight
@@ -364,6 +392,8 @@ mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 		"V",
 		"Iin1",
 		"Iin2",
+		"Irand",
+		"GenState",
 		"Time",
 		"U",
 		"Weight",
@@ -384,6 +414,8 @@ mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 	mxSetField(ReturnPointer, 0, "U"                 , assignmxArray(SingleStateList.U, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "Iin1"              , assignmxArray(SingleStateList.Iin1, mxSINGLE_CLASS));
 	mxSetField(ReturnPointer, 0, "Iin2"              , assignmxArray(SingleStateList.Iin2, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "Irand"             , assignmxArray(SingleStateList.Irand, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "GenState"          , assignmxArray(SingleStateList.GenState, mxUINT32_CLASS));
 	if (SingleStateList.Time >= 0)
 		mxSetField(ReturnPointer, 0, "Time"          , assignmxArray(SingleStateList.Time, mxINT32_CLASS));
 	else
@@ -418,8 +450,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, mxArray *prhs[]){
 	StateVarsOutStruct StateVarsOutput;
 	FinalStateStruct FinalStateOutput;
 	InitialStateStruct InitialStateOutput;
-	// Declaring Final State output vectors
-	
+
 	// Running Simulation Function.
 	chrono::system_clock::time_point TStart = chrono::system_clock::now();
 	SimulateParallel(

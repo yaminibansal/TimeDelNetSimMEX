@@ -1,3 +1,6 @@
+#ifndef FILT_RANDOM_TBB_HPP
+#define FILT_RANDOM_TBB_HPP
+
 #include <random>
 #include <chrono>
 #include <stdint.h>
@@ -15,6 +18,32 @@ class XorShiftPlus{
 public:
 	struct StateStruct{
 		uint32_t w, x, y, z;
+		void ConvertVecttoState(const MexVector<uint32_t> &SeedState) {
+			this->w = (SeedState.size() > 0) ? 
+				SeedState[0] : (uint32_t)chrono::system_clock::now().time_since_epoch().count();
+			this->x = (SeedState.size() > 1) ? 
+				SeedState[1] : (uint32_t)chrono::system_clock::now().time_since_epoch().count();
+			this->y = (SeedState.size() > 2) ?
+				SeedState[2] : (uint32_t)chrono::system_clock::now().time_since_epoch().count();
+			this->z = (SeedState.size() > 3) ?
+				SeedState[3] : (uint32_t)chrono::system_clock::now().time_since_epoch().count();
+		}
+		void ConvertStatetoVect(MexVector<uint32_t> &SeedState){
+			if (SeedState.size() != 4)
+				SeedState.resize(4);
+			SeedState[0] = w;
+			SeedState[1] = x;
+			SeedState[2] = y;
+			SeedState[3] = z;
+		}
+		void ConvertStatetoVect(const MexVector<uint32_t> &SeedState){
+			if (SeedState.size() != 4)
+				throw ExOps::EXCEPTION_CONST_MOD;
+			SeedState[0] = w;
+			SeedState[1] = x;
+			SeedState[2] = y;
+			SeedState[3] = z;
+		}
 	};
 private:
 	StateStruct State;
@@ -51,6 +80,7 @@ public:
 	void setstate(const StateStruct &SeedState) {
 		State = SeedState;
 	}
+	
 
 };
 
@@ -102,15 +132,16 @@ public:
 		Generator2 = XorShiftPlus();
 		alpha = alpha_;
 	}
+
 	void configure(resTyp alpha_){
 		alpha = alpha_;
 	};
-	
 	void configure(const XorShiftPlus &Generator1_, const XorShiftPlus &Generator2_, resTyp alpha_ = resTyp(-1)){
 		Generator1 = Generator1_;
 		Generator2 = Generator2_;
 		alpha = (alpha_ > 0)?alpha_ : alpha;
 	}
+
 	void setstate(const StateStruct &State){
 		Generator1 = State.Generator1;
 		Generator2 = State.Generator2;
@@ -123,7 +154,12 @@ public:
 		State.Values = *this;
 		State.alpha = alpha;
 	}
-
+	void readstate(StateStruct &State) const{
+		State.Generator1 = Generator1;
+		State.Generator2 = Generator2;
+		this->sharewith(State.Values);
+		State.alpha = alpha;
+	}
 	void resize(int NewSize){
 		MexVector<resTyp>::resize(NewSize, resTyp(0));
 	}
@@ -195,3 +231,4 @@ public:
 	// Yo(YEAHHNN);
 	// YEAHHNN();
 // }
+#endif
