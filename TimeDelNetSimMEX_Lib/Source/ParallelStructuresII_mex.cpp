@@ -113,16 +113,16 @@ void InputArgs::IExtFunc(float time, MexVector<float> &Iext)
 	//((int)(time / 0.1))
 	int N = Iext.size();
 	if (time - 0.1 <= 0.015){	//((int)(time / 0.1))*
-		for (int i = 0; i < 200*N/2000; ++i)
+		for (int i = 0; i < 100*N/2000; ++i)
 			Iext[i] = 9;
 	}
 	else if (time - 0.8 <= 0.015){	//((int)(time / 0.1))*
-		for (int i = 0; i < 200*N/2000; ++i)
-			Iext[i] = 4;
+		for (int i = 0; i < 100*N/2000; ++i)
+			Iext[i] = 3;
 	}
 	else{
-		for (int i = 0; i < 200*N/2000; ++i)
-			Iext[i] = 4;
+		for (int i = 0; i < 100*N/2000; ++i)
+			Iext[i] = 3;
 	}
 }
 

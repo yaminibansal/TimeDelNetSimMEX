@@ -57,6 +57,7 @@ Temporary Items
 
 !/TimeDelNetSimMEX_Lib
 /TimeDelNetSimMEX_Lib/*
+!/TimeDelNetSimMEX_Lib/*.*
 !TimeDelNetSimMEX_Lib/Headers
 !TimeDelNetSimMEX_Lib/Source
 !TimeDelNetSimMEX_Lib/Items

@@ -272,10 +272,10 @@ struct InternalVars{
 		NoOfms(IArgs.NoOfms),
 		DelayRange(IArgs.DelayRange),
 		I0(1.0f),
-		CurrentDecayFactor1(powf(7.0f / 10, 1.0f / onemsbyTstep)),
-		CurrentDecayFactor2(powf(7.0f / (10.0f), 1.0f / (4 * onemsbyTstep))),
+		CurrentDecayFactor1(powf(9.0f / 10, 1.0f / onemsbyTstep)),
+		CurrentDecayFactor2(powf(9.0f / (10.0f), 1.0f / (4 * onemsbyTstep))),
 		alpha(0.5),
-		StdDev(5)
+		StdDev(3.5)
 		{
 
 		// Setting value of beta
