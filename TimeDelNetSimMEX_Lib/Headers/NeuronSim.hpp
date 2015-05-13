@@ -73,6 +73,7 @@ struct NeuronSimulate{
 	MexVector<Synapse> &Network;
 	int CurrentQueueIndex, QueueSize, onemsbyTstep, time;
 	float StdDev;
+	float I0;
 	MexVector<size_t> &PreSynNeuronSectionBeg;
 	MexVector<size_t> &PreSynNeuronSectionEnd;
 	atomicIntVect &NAdditionalSpikesNow;
@@ -90,6 +91,7 @@ struct NeuronSimulate{
 		int CurrentQueueIndex_, int QueueSize_, int onemsbyTstep_,
 		int time_,
 		float StdDev_,
+		float I0_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		atomicIntVect &NAdditionalSpikesNow_,
@@ -106,6 +108,7 @@ struct NeuronSimulate{
 		CurrentQueueIndex(CurrentQueueIndex_), QueueSize(QueueSize_), onemsbyTstep(onemsbyTstep_),
 		time(time_),
 		StdDev(StdDev_),
+		I0(I0_),
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
 		NAdditionalSpikesNow(NAdditionalSpikesNow_),
@@ -271,11 +274,11 @@ struct InternalVars{
 		onemsbyTstep(IArgs.onemsbyTstep),
 		NoOfms(IArgs.NoOfms),
 		DelayRange(IArgs.DelayRange),
-		I0(1.0f),
+		I0(0.1f),
 		CurrentDecayFactor1(powf(9.0f / 10, 1.0f / onemsbyTstep)),
 		CurrentDecayFactor2(powf(9.0f / (10.0f), 1.0f / (4 * onemsbyTstep))),
 		alpha(0.5),
-		StdDev(3.5)
+		StdDev(0)
 		{
 
 		// Setting value of beta

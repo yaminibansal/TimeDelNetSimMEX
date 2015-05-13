@@ -43,7 +43,7 @@ void CurrentUpdate::operator () (const tbb::blocked_range<int*> &BlockedRange) c
 	int *end = BlockedRange.end();
 	for (int * iter = begin; iter < end; ++iter){
 		int CurrentSynapse = *iter;
-		float AddedCurrent = (I0*Network[CurrentSynapse].Weight)*(1 << 17);
+		float AddedCurrent = (Network[CurrentSynapse].Weight)*(1 << 17);
 		Iin1[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
 		Iin2[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
 		LastSpikedTimeSyn[CurrentSynapse] = time;
@@ -63,7 +63,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 		else{
 			//Implementing Izhikevich differential equation
 			float Vnew, Unew;
-			Vnew = Vnow[j] + (Vnow[j] * (0.04f*Vnow[j] + 5.0f) + 140.0f - Unow[j] + (float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / onemsbyTstep;
+			Vnew = Vnow[j] + (Vnow[j] * (0.04f*Vnow[j] + 5.0f) + 140.0f - Unow[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / onemsbyTstep;
 			Unew = Unow[j] + (Neurons[j].a*(Neurons[j].b*Vnow[j] - Unow[j])) / onemsbyTstep;
 			Vnow[j] = (Vnew > -100)? Vnew: -100;
 			Unow[j] = Unew;
@@ -110,8 +110,13 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 }
 void InputArgs::IExtFunc(float time, MexVector<float> &Iext)
 {
-	//((int)(time / 0.1))
+	//Iext function added by Yamini
 	int N = Iext.size();
+	for (int i = 0; i < 2; ++i){
+		Iext[i] = 3;
+	}
+	//((int)(time / 0.1))
+/*	int N = Iext.size();
 	if (time - 0.1 <= 0.015){	//((int)(time / 0.1))*
 		for (int i = 0; i < 100*N/2000; ++i)
 			Iext[i] = 9;
@@ -123,7 +128,7 @@ void InputArgs::IExtFunc(float time, MexVector<float> &Iext)
 	else{
 		for (int i = 0; i < 100*N/2000; ++i)
 			Iext[i] = 3;
-	}
+	}*/
 }
 
 void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
@@ -312,7 +317,7 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 	// Storing Itot
 	if (OutputControl & OutOps::I_TOT_REQ){
 		for (int j = 0; j < N; ++j)
-			OutVars.Itot(CurrentInsertPos, j) = Iext[j] + StdDev*Irand[j] + (float)(Iin2[j] - Iin1[j]) / (1 << 17);
+			OutVars.Itot(CurrentInsertPos, j) = Iext[j] + StdDev*Irand[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17);
 	}
 }
 void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
@@ -373,7 +378,7 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 		// Storing Itot
 		if (OutputControl & OutOps::I_TOT_REQ){
 			for (int j = 0; j < N; ++j)
-				OutVars.Itot(CurrentInsertPos, j) = Iext[j] + StdDev*Irand[j] + (float)(Iin2[j] - Iin1[j]) / (1 << 17);
+				OutVars.Itot(CurrentInsertPos, j) = Iext[j] + StdDev*Irand[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17);
 		}
 	}
 }
@@ -591,7 +596,7 @@ void SimulateParallel(
 		// Calculation of V,U[t] from V,U[t-1], Iin = Itemp
 		tbb::parallel_for(tbb::blocked_range<int>(0, N, 100), NeuronSimulate(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
-			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, PreSynNeuronSectionBeg,
+			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, PreSynNeuronSectionBeg,
 			PreSynNeuronSectionEnd, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
 
 		/////// This is code to extend vectors before they are written to.
