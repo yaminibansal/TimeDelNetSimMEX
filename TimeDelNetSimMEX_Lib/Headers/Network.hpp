@@ -5,6 +5,7 @@ struct Synapse{
 	int		NEnd;
 	float	Weight;
 	int	DelayinTsteps;
+	int Plastic;
 };
 
 struct Neuron{
@@ -12,5 +13,6 @@ struct Neuron{
 	float b;
 	float c;
 	float d;
+	float tmax;
 };
 #endif

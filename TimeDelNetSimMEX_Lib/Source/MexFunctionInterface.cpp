@@ -118,8 +118,8 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 	InputArgList.OutputControl = 0;
 	InputArgList.StatusDisplayInterval = DEFAULT_STATUS_DISPLAY_STEP;
 
-	float*      genFloatPtr[4];     // Generic float Pointers used around the place to access data
-	int*        genIntPtr[2];       // Generic int Pointers used around the place to access data
+	float*      genFloatPtr[5];     // Generic float Pointers used around the place to access data
+	int*        genIntPtr[3];       // Generic int Pointers used around the place to access data
 	uint32_t*	genUIntPtr[1];		// Generic unsigned int Pointers used around the place to access data (generator bits)
 	short *     genCharPtr;         // Generic short Pointer used around the place to access data (delays specifically)
 	mxArray *   genmxArrayPtr;      // Generic mxArray Pointer used around the place to access data
@@ -129,6 +129,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 	genFloatPtr[1] = reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "b")));	// b[N]
 	genFloatPtr[2] = reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "c")));	// c[N]
 	genFloatPtr[3] = reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "d")));	// d[N]
+	genFloatPtr[4] = reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "tmax")));	// tmax[N]
 
 	InputArgList.Neurons = MexVector<Neuron>(N);
 
@@ -137,6 +138,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		InputArgList.Neurons[i].b = genFloatPtr[1][i];
 		InputArgList.Neurons[i].c = genFloatPtr[2][i];
 		InputArgList.Neurons[i].d = genFloatPtr[3][i];
+		InputArgList.Neurons[i].tmax = genFloatPtr[4][i];
 	}
 
 	// Initializing network (Synapse) specification structure array Network
@@ -144,6 +146,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 	genIntPtr[1]   = reinterpret_cast<int   *>(mxGetData(mxGetField(MatlabInputStruct, 0, "NEnd")));      // NEnd[M]
 	genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "Weight")));    // Weight[M]
 	genFloatPtr[1] = reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "Delay")));     // Delay[M]
+	genIntPtr[2] = reinterpret_cast<int   *>(mxGetData(mxGetField(MatlabInputStruct, 0, "Plastic")));	  // Plastic[M]
 
 	InputArgList.Network = MexVector<Synapse>(M);
 
@@ -153,6 +156,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		InputArgList.Network[i].Weight = genFloatPtr[0][i];
 		InputArgList.Network[i].DelayinTsteps = (int(genFloatPtr[1][i] * InputArgList.onemsbyTstep + 0.5) > 0) ?
 			int(genFloatPtr[1][i] * InputArgList.onemsbyTstep + 0.5) : 1;
+		InputArgList.Network[i].Plastic = genIntPtr[2][i];
 	}
 
 	//Initializing external input current

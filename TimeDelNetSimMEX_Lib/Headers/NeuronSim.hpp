@@ -76,6 +76,9 @@ struct NeuronSimulate{
 	float I0;
 	MexVector<size_t> &PreSynNeuronSectionBeg;
 	MexVector<size_t> &PreSynNeuronSectionEnd;
+	MexVector<size_t> &PostSynNeuronSectionBeg;
+	MexVector<size_t> &PostSynNeuronSectionEnd;
+	MexVector<int> AuxArray;
 	atomicIntVect &NAdditionalSpikesNow;
 	MexVector<int> &LastSpikedTimeNeuron;
 
@@ -94,6 +97,9 @@ struct NeuronSimulate{
 		float I0_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
+		MexVector<size_t> &PostSynNeuronSectionBeg_,
+		MexVector<size_t> &PostSynNeuronSectionEnd_,
+		MexVector<int> &AuxArray_,
 		atomicIntVect &NAdditionalSpikesNow_,
 		MexVector<int> &LastSpikedTimeNeuron_
 		) :
@@ -111,6 +117,9 @@ struct NeuronSimulate{
 		I0(I0_),
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
+		PostSynNeuronSectionBeg(PostSynNeuronSectionBeg_),
+		PostSynNeuronSectionEnd(PostSynNeuronSectionEnd_),
+		AuxArray(AuxArray_),
 		NAdditionalSpikesNow(NAdditionalSpikesNow_),
 		LastSpikedTimeNeuron(LastSpikedTimeNeuron_)
 	{};

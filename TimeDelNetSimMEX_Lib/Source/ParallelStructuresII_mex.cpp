@@ -76,7 +76,14 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				if (PreSynNeuronSectionBeg[j] >= 0)
 					for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k)
 						NAdditionalSpikesNow[(CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize].fetch_and_increment();
-				//Space to implement any causal Learning Rule
+				//Implementing Causal Learning Rule
+					if (PostSynNeuronSectionBeg[j] >= 0)
+					for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k)
+					if (Network[AuxArray[k]].Plastic==1)
+						Network[AuxArray[k]].Weight += Neurons[j].tmax;
+
+					//Implementing Metaplasticity by changing tmax
+					
 			}
 		}
 	}
@@ -599,7 +606,8 @@ void SimulateParallel(
 		tbb::parallel_for(tbb::blocked_range<int>(0, N, 100), NeuronSimulate(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
 			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, PreSynNeuronSectionBeg,
-			PreSynNeuronSectionEnd, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
+			PreSynNeuronSectionEnd, PostSynNeuronSectionBeg,
+			PostSynNeuronSectionEnd, AuxArray, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
 
 		/////// This is code to extend vectors before they are written to.
 		for (int k = 0; k < QueueSize; ++k){
