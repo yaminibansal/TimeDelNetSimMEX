@@ -98,6 +98,10 @@ int getOutputControl(char* OutputControlSequence){
 			OutputControl = AddorRemove ? 
 			         OutputControl | OutOps::FINAL_STATE_REQ : 
 					 OutputControl & ~(OutOps::FINAL_STATE_REQ);
+		if (!_strcmpi(SequenceWord, "tmax"))
+			OutputControl = AddorRemove ?
+			OutputControl | OutOps::TMAX_REQ :
+			OutputControl & ~(OutOps::TMAX_REQ);
 		SequenceWord = strtok_s(NULL, Delims, &NextNonDelim);
 	}
 	return OutputControl;
@@ -117,6 +121,8 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 	InputArgList.StorageStepSize = DEFAULT_STORAGE_STEP;
 	InputArgList.OutputControl = 0;
 	InputArgList.StatusDisplayInterval = DEFAULT_STATUS_DISPLAY_STEP;
+	InputArgList.ltp = *reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "ltp")));
+	InputArgList.ltd = *reinterpret_cast<float *>(mxGetData(mxGetField(MatlabInputStruct, 0, "ltd")));
 
 	float*      genFloatPtr[5];     // Generic float Pointers used around the place to access data
 	int*        genIntPtr[3];       // Generic int Pointers used around the place to access data
@@ -335,6 +341,7 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 		"WeightOut",
 		"Iin",
 		"Itot",
+		"tmaxOut",
 		nullptr
 	};
 
@@ -350,6 +357,8 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 	mxSetField(ReturnPointer, 0, "Iin", assignmxArray(Output.Iin, mxSINGLE_CLASS));
 	// Assigning Itot
 	mxSetField(ReturnPointer, 0, "Itot", assignmxArray(Output.Itot, mxSINGLE_CLASS));
+	// Assigning tmaxout
+	mxSetField(ReturnPointer, 0, "tmaxOut", assignmxArray(Output.tmaxOut, mxSINGLE_CLASS));
 
 	return ReturnPointer;
 }
@@ -368,6 +377,7 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 		"SpikeQueue",
 		"LSTNeuron",
 		"LSTSyn",
+		"tmax",
 		nullptr
 	};
 	int NFields = 0;
@@ -398,6 +408,7 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	// Assigning Last Spiked Time related information
 	mxSetField(ReturnPointer, 0, "LSTNeuron"     , assignmxArray(Output.LSTNeuronOut, mxINT32_CLASS));
 	mxSetField(ReturnPointer, 0, "LSTSyn"        , assignmxArray(Output.LSTSynOut, mxINT32_CLASS));
+	mxSetField(ReturnPointer, 0, "tmax"			 , assignmxArray(Output.tmaxOut, mxSINGLE_CLASS));
 
 	return ReturnPointer;
 }
@@ -416,6 +427,7 @@ mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 		"SpikeQueue",
 		"LSTNeuron",
 		"LSTSyn",
+		"tmax",
 		nullptr
 	};
 	int NFields = 0;
@@ -449,6 +461,8 @@ mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 	// Assigning Last Spiked Time related information
 	mxSetField(ReturnPointer, 0, "LSTNeuron"         , assignmxArray(SingleStateList.LSTNeuron, mxINT32_CLASS));
 	mxSetField(ReturnPointer, 0, "LSTSyn"            , assignmxArray(SingleStateList.LSTSyn, mxINT32_CLASS));
+	// Assigning tmaxOut
+	mxSetField(ReturnPointer, 0, "tmax"				 , assignmxArray(SingleStateList.tmax, mxSINGLE_CLASS));
 
 	return ReturnPointer;
 }

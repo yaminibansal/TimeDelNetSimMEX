@@ -73,16 +73,29 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				Vnow[j] = 30.0f;
 
 				LastSpikedTimeNeuron[j] = time;
-				if (PreSynNeuronSectionBeg[j] >= 0)
-					for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k)
+				if (PreSynNeuronSectionBeg[j] >= 0){
+					for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k){
 						NAdditionalSpikesNow[(CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize].fetch_and_increment();
+					}
+				}
 				//Implementing Causal Learning Rule
-					if (PostSynNeuronSectionBeg[j] >= 0)
-					for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k)
-					if (Network[AuxArray[k]].Plastic==1)
-						Network[AuxArray[k]].Weight += Neurons[j].tmax;
+				if (PostSynNeuronSectionBeg[j] >= 0){
+					for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
+						if (Network[AuxArray[k]].Plastic == 1){
+							//STDP rule
+							if (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart] <= Neurons[j].tmax*onemsbyTstep*1000){
+								Network[AuxArray[k]].Weight += ltp;
+							}
+							else{
+								Network[AuxArray[k]].Weight -= ltd;
+							}
+						}
+					}
+				}
 
-					//Implementing Metaplasticity by changing tmax
+				//Implementing Metaplasticity by changing tmax
+				Neurons[j].tmax += 0.001f;
+				
 					
 			}
 		}
@@ -196,6 +209,9 @@ void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
 
 	if (OutputControl & OutOps::CURRENT_QINDS_REQ)
 		this->CurrentQIndexOut = MexVector<int>(TimeDimLen);
+
+	if (OutputControl & OutOps::TMAX_REQ)
+		this->tmaxOut = MexMatrix<float>(TimeDimLen, N);
 }
 void OutputVarsStruct::initialize(const InternalVars &IntVars){
 	int TimeDimLen;
@@ -222,6 +238,8 @@ void OutputVarsStruct::initialize(const InternalVars &IntVars){
 		this->Iin = MexMatrix<float>(TimeDimLen, N);
 	if (OutputControl & OutOps::I_TOT_REQ)
 		this->Itot = MexMatrix<float>(TimeDimLen, N);
+	if (OutputControl & OutOps::TMAX_REQ)
+		this->tmaxOut = MexMatrix<float>(TimeDimLen, N);
 }
 void FinalStateStruct::initialize(const InternalVars &IntVars){
 	int OutputControl	= IntVars.OutputControl;
@@ -241,6 +259,7 @@ void FinalStateStruct::initialize(const InternalVars &IntVars){
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
+		this->tmax = MexVector<float>(N);
 	}
 	this->CurrentQIndex = -1;
 	this->Time = -1;
@@ -259,10 +278,10 @@ void InitialStateStruct::initialize(const InternalVars &IntVars){
 		this->Iin2 = MexVector<float>(N);
 		this->GenState = MexVector<uint32_t>(4);
 		this->Weight = MexVector<float>(M);
-		this->Weight = MexVector<float>(M);
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
+		this->tmax = MexVector<float>(N);
 	}
 	this->CurrentQIndex = -1;
 	this->Time = -1;
@@ -302,6 +321,17 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 		for (int j = 0; j < M; ++j)
 			StateOut.WeightOut(CurrentInsertPos, j) = Network[j].Weight;
 	}
+
+	// Storing tmax
+	if (OutputControl & OutOps::TMAX_REQ){
+		size_t tempSize = Neurons.size();
+		for (int j = 0; j < tempSize; ++j){
+			OutVars.tmaxOut(CurrentInsertPos, j) = Neurons[j].tmax;
+			StateOut.tmaxOut(CurrentInsertPos, j) = Neurons[j].tmax;
+		}
+	}
+
+
 
 	// Storing Spike Queue related state informations
 	if (OutputControl & OutOps::SPIKE_QUEUE_REQ)
@@ -364,6 +394,15 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 				StateOut.WeightOut(CurrentInsertPos, j) = Network[j].Weight;
 		}
 
+		// Storing tmax
+		if (OutputControl & OutOps::TMAX_REQ){
+			size_t tempSize = Neurons.size();
+			for (int j = 0; j < tempSize; ++j){
+				OutVars.tmaxOut(CurrentInsertPos, j) = Neurons[j].tmax;
+				StateOut.tmaxOut(CurrentInsertPos, j) = Neurons[j].tmax;
+			}
+		}
+
 		// Storing Spike Queue related state informations
 		if (OutputControl & OutOps::SPIKE_QUEUE_REQ)
 			for (int j = 0; j < QueueSize; ++j)
@@ -406,6 +445,9 @@ void InternalVars::DoSingleStateOutput(SingleStateStruct &FinalStateOut){
 	FinalStateOut.U = U;
 	for (int j = 0; j < M; ++j){
 		FinalStateOut.Weight[j] = Network[j].Weight;
+	}
+	for (int j = 0; j < N; ++j){
+		FinalStateOut.tmax[j] = Neurons[j].tmax;
 	}
 	for (int j = 0; j < QueueSize; ++j){
 		FinalStateOut.SpikeQueue[j] = SpikeQueue[j];
@@ -455,6 +497,9 @@ void SimulateParallel(
 	int &StorageStepSize	= IntVars.StorageStepSize;
 	int &OutputControl		= IntVars.OutputControl;
 	int &i					= IntVars.i;
+
+	float &ltp				= IntVars.ltp;
+	float &ltd				= IntVars.ltd;
 
 	const float &I0			= IntVars.I0;	// Value of the current factor to be multd with weights (constant)
 	// calculate value of alpha for filtering
@@ -605,7 +650,7 @@ void SimulateParallel(
 		// Calculation of V,U[t] from V,U[t-1], Iin = Itemp
 		tbb::parallel_for(tbb::blocked_range<int>(0, N, 100), NeuronSimulate(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
-			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, PreSynNeuronSectionBeg,
+			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, ltp, ltd, PreSynNeuronSectionBeg,
 			PreSynNeuronSectionEnd, PostSynNeuronSectionBeg,
 			PostSynNeuronSectionEnd, AuxArray, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
 

@@ -32,7 +32,8 @@ struct OutOps{
 		LASTSPIKED_SYN_REQ  = (1 << 12), 
 		I_TOT_REQ           = (1 << 13), 
 		INITIAL_STATE_REQ   = (1 << 14), 
-		FINAL_STATE_REQ     = (1 << 15)
+		FINAL_STATE_REQ     = (1 << 15),
+		TMAX_REQ            = (1 << 16)
 	};
 };
 
@@ -74,6 +75,7 @@ struct NeuronSimulate{
 	int CurrentQueueIndex, QueueSize, onemsbyTstep, time;
 	float StdDev;
 	float I0;
+	float ltp, ltd;
 	MexVector<size_t> &PreSynNeuronSectionBeg;
 	MexVector<size_t> &PreSynNeuronSectionEnd;
 	MexVector<size_t> &PostSynNeuronSectionBeg;
@@ -95,6 +97,7 @@ struct NeuronSimulate{
 		int time_,
 		float StdDev_,
 		float I0_,
+		float ltp_, float ltd_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		MexVector<size_t> &PostSynNeuronSectionBeg_,
@@ -115,6 +118,7 @@ struct NeuronSimulate{
 		time(time_),
 		StdDev(StdDev_),
 		I0(I0_),
+		ltp(ltp_), ltd(ltd_),
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
 		PostSynNeuronSectionBeg(PostSynNeuronSectionBeg_),
@@ -208,6 +212,8 @@ struct InputArgs{
 	int OutputControl;
 	int StorageStepSize;
 	int StatusDisplayInterval;
+	float ltp;
+	float ltd;
 
 	InputArgs() :
 		Network(),
@@ -238,6 +244,8 @@ struct InternalVars{
 	int NoOfms;
 	int DelayRange;
 	int CurrentQIndex;
+	float ltp;
+	float ltd;
 	const float I0;
 	const float CurrentDecayFactor1, CurrentDecayFactor2;
 	const float alpha;
@@ -271,6 +279,8 @@ struct InternalVars{
 		OutputControl(IArgs.OutputControl),
 		StorageStepSize(IArgs.StorageStepSize),
 		StatusDisplayInterval(IArgs.StatusDisplayInterval),
+		ltp(IArgs.ltp),
+		ltd(IArgs.ltd),
 		Network(IArgs.Network),
 		Neurons(IArgs.Neurons),
 		InpCurr(IArgs.InpCurr),
@@ -407,11 +417,13 @@ struct OutputVarsStruct{
 	MexMatrix<float> WeightOut;
 	MexMatrix<float> Iin;
 	MexMatrix<float> Itot;
+	MexMatrix<float> tmaxOut;
 
 	OutputVarsStruct() :
 		WeightOut(),
 		Itot(),
-		Iin() {}
+		Iin(),
+		tmaxOut() {}
 
 	void initialize(const InternalVars &);
 };
@@ -431,6 +443,7 @@ struct StateVarsOutStruct{
 	MexVector<int> CurrentQIndexOut;
 	MexMatrix<int> LSTNeuronOut;
 	MexMatrix<int> LSTSynOut;
+	MexMatrix<float> tmaxOut;
 
 	StateVarsOutStruct() :
 		WeightOut(),
@@ -444,7 +457,8 @@ struct StateVarsOutStruct{
 		SpikeQueueOut(),
 		CurrentQIndexOut(),
 		LSTNeuronOut(),
-		LSTSynOut() {}
+		LSTSynOut(),
+		tmaxOut() {}
 
 	void initialize(const InternalVars &);
 };
@@ -461,6 +475,7 @@ struct SingleStateStruct{
 	MexVector<MexVector<int > > SpikeQueue;
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
+	MexVector<float> tmax;
 	int Time;
 	int CurrentQIndex;
 
@@ -474,7 +489,8 @@ struct SingleStateStruct{
 		Irand(),
 		SpikeQueue(),
 		LSTNeuron(),
-		LSTSyn() {}
+		LSTSyn(), 
+		tmax() {}
 
 	virtual void initialize(const InternalVars &) {}
 };
