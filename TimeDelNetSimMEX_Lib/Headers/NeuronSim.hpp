@@ -175,9 +175,10 @@ struct OutputVarsStruct;
 
 
 struct InputArgs{
-	static void IExtFunc(float, MexVector<float> &);
+	static void IExtFunc(int, MexMatrix<float> &, MexVector<float> &);
 	MexVector<Synapse> Network;
 	MexVector<Neuron> Neurons;
+	MexMatrix<float> InpCurr;
 	MexVector<int> InterestingSyns;
 	MexVector<float> V;
 	MexVector<float> U;
@@ -202,6 +203,7 @@ struct InputArgs{
 	InputArgs() :
 		Network(),
 		Neurons(),
+		InpCurr(),
 		InterestingSyns(),
 		V(),
 		U(),
@@ -238,6 +240,7 @@ struct InternalVars{
 
 	MexVector<Synapse> &Network;
 	MexVector<Neuron> &Neurons;
+	MexMatrix<float> &InpCurr;
 	MexVector<int> &InterestingSyns;
 	MexVector<float> &V;
 	MexVector<float> &U;
@@ -261,6 +264,7 @@ struct InternalVars{
 		StatusDisplayInterval(IArgs.StatusDisplayInterval),
 		Network(IArgs.Network),
 		Neurons(IArgs.Neurons),
+		InpCurr(IArgs.InpCurr),
 		InterestingSyns(IArgs.InterestingSyns),
 		V(IArgs.V),
 		U(IArgs.U),

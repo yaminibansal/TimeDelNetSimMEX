@@ -108,12 +108,13 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 		}
 	}
 }
-void InputArgs::IExtFunc(float time, MexVector<float> &Iext)
+void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &Iext)
 {
 	//Iext function added by Yamini
 	int N = Iext.size();
-	for (int i = 0; i < 2; ++i){
-		Iext[i] = 3;
+	int Ninp = InpCurr.nrows();
+	for (int i = 0; i < Ninp; ++i){
+		Iext[i] = InpCurr(i, time);
 	}
 	//((int)(time / 0.1))
 /*	int N = Iext.size();
@@ -427,6 +428,7 @@ void SimulateParallel(
 	MexVector<Neuron>			&Neurons				= IntVars.Neurons;
 	MexVector<float>			&Vnow					= IntVars.V;
 	MexVector<float>			&Unow					= IntVars.U;
+	MexMatrix<float>			&InpCurr				= IntVars.InpCurr;
 	MexVector<int>				&InterestingSyns		= IntVars.InterestingSyns;
 	atomicLongVect				&Iin1					= IntVars.Iin1;
 	atomicLongVect				&Iin2					= IntVars.Iin2;
@@ -563,7 +565,7 @@ void SimulateParallel(
 	for (i = 1; i<=nSteps; ++i){
 		
 		time = time + 1;
-		InputArgs::IExtFunc(time*0.001f / onemsbyTstep, Iext);
+		InputArgs::IExtFunc(time, InpCurr, Iext);
 		Irand.generate();
 
 		// This iteration applies time update equation for internal current

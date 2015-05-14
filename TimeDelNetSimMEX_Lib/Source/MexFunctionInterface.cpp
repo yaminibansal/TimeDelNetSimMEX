@@ -107,6 +107,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 
 	size_t N = mxGetNumberOfElements(mxGetField(MatlabInputStruct, 0, "a"));
 	size_t M = mxGetNumberOfElements(mxGetField(MatlabInputStruct, 0, "NStart"));
+	size_t Ninp = mxGetDimensions(mxGetField(MatlabInputStruct, 0, "InpCurr"))[0];
 
 	InputArgList.onemsbyTstep = *reinterpret_cast<int *>(mxGetData(mxGetField(MatlabInputStruct, 0, "onemsbyTstep")));
 	InputArgList.NoOfms = *reinterpret_cast<int *>(mxGetData(mxGetField(MatlabInputStruct, 0, "NoOfms")));
@@ -153,6 +154,16 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		InputArgList.Network[i].DelayinTsteps = (int(genFloatPtr[1][i] * InputArgList.onemsbyTstep + 0.5) > 0) ?
 			int(genFloatPtr[1][i] * InputArgList.onemsbyTstep + 0.5) : 1;
 	}
+
+	//Initializing external input current
+	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "InpCurr");
+	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
+		size_t NumElems = mxGetNumberOfElements(genmxArrayPtr);
+		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
+		InputArgList.InpCurr = MexMatrix<float>(Ninp, InputArgList.NoOfms*InputArgList.onemsbyTstep);
+		InputArgList.InpCurr.copyArray(0, 0, genFloatPtr[0], NumElems);
+	}
+
 
 	// Initializing Time
 	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "Time");
