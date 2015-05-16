@@ -133,6 +133,7 @@ struct NeuronSimulate{
 struct SpikeRecord{
 	MexVector<float> &Vnow;
 	MexVector<Synapse> &Network;
+	MexVector<Neuron> &Neurons;
 	int CurrentQueueIndex, QueueSize;
 	MexVector<size_t> &PreSynNeuronSectionBeg;
 	MexVector<size_t> &PreSynNeuronSectionEnd;
@@ -142,6 +143,7 @@ struct SpikeRecord{
 	SpikeRecord(
 		MexVector<float> &Vnow_,
 		MexVector<Synapse> &Network_,
+		MexVector<Neuron> &Neurons_,
 		int CurrentQueueIndex_, int QueueSize_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
@@ -150,6 +152,7 @@ struct SpikeRecord{
 		) :
 		Vnow(Vnow_),
 		Network(Network_),
+		Neurons(Neurons_),
 		CurrentQueueIndex(CurrentQueueIndex_), QueueSize(QueueSize_), 
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
@@ -297,9 +300,12 @@ struct InternalVars{
 		onemsbyTstep(IArgs.onemsbyTstep),
 		NoOfms(IArgs.NoOfms),
 		DelayRange(IArgs.DelayRange),
-		I0(0.1f),
-		CurrentDecayFactor1(powf(9.0f / 10, 1.0f / onemsbyTstep)),
-		CurrentDecayFactor2(powf(9.0f / (10.0f), 1.0f / (4 * onemsbyTstep))),
+		//I0(0.01f),
+		I0(0.000000001f),
+		CurrentDecayFactor1(powf(0.9355, 2.0f / onemsbyTstep)),
+		//CurrentDecayFactor1(0.9672),
+		CurrentDecayFactor2(powf(0.9355, 1.0f / onemsbyTstep)),
+		//CurrentDecayFactor2(0.9835),
 		alpha(0.5),
 		StdDev(0)
 		{
@@ -324,7 +330,8 @@ struct InternalVars{
 		if (V.istrulyempty()){
 			V.resize(N);
 			for (int i = 0; i<N; ++i){
-				V[i] = (Neurons[i].b - 5.0f - sqrt((5.0f - Neurons[i].b)*(5.0f - Neurons[i].b) - 22.4f)) / 0.08f;
+				//V[i] = (Neurons[i].b - 5.0f - sqrt((5.0f - Neurons[i].b)*(5.0f - Neurons[i].b) - 22.4f)) / 0.08f;
+				V[i] = Neurons[i].d;
 			}
 		}
 		else if (V.size() != N){

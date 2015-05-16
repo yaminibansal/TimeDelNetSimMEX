@@ -170,7 +170,7 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
 		size_t NumElems = mxGetNumberOfElements(genmxArrayPtr);
 		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
-		InputArgList.InpCurr = MexMatrix<float>(Ninp, InputArgList.NoOfms*InputArgList.onemsbyTstep);
+		InputArgList.InpCurr = MexMatrix<float>(InputArgList.NoOfms*InputArgList.onemsbyTstep, Ninp);
 		InputArgList.InpCurr.copyArray(0, 0, genFloatPtr[0], NumElems);
 	}
 

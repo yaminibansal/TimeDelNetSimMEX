@@ -55,23 +55,30 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		if (Vnow[j] == 30.0f){
-			//Implementing Izhikevich resetting
-			Vnow[j] = Neurons[j].c;
-			Unow[j] += Neurons[j].d;
+		if (Vnow[j] == 4*Neurons[j].c){
+		//if (Vnow[j] == 30.0f){
+			//Implementing LIF resetting
+			//Vnow[j] =  Neurons[j].c; 
+			Vnow[j] = Neurons[j].d;
+			//Unow[j] += Neurons[j].d;
 		}
 		else{
-			//Implementing Izhikevich differential equation
-			float Vnew, Unew;
-			Vnew = Vnow[j] + (Vnow[j] * (0.04f*Vnow[j] + 5.0f) + 140.0f - Unow[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / onemsbyTstep;
-			Unew = Unow[j] + (Neurons[j].a*(Neurons[j].b*Vnow[j] - Unow[j])) / onemsbyTstep;
-			Vnow[j] = (Vnew > -100)? Vnew: -100;
-			Unow[j] = Unew;
+			//Implementing LIF differential equation
+			float Vnew, Unew, k1, k2, Isyn;
+			Isyn = I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17);
+			//Vnew = Vnow[j] + (Vnow[j] * (0.04f*Vnow[j] + 5.0f) + 140.0f - Unow[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / onemsbyTstep;
+			k1 = (Isyn + Iext[j] + StdDev*Irand[j])/Neurons[j].b - Neurons[j].a*(Vnow[j] - Neurons[j].d) / Neurons[j].b;
+			k2 = (Isyn + Iext[j] + StdDev*Irand[j])/Neurons[j].b - Neurons[j].a*(Vnow[j] + k1*0.001f/onemsbyTstep - Neurons[j].d) / Neurons[j].b;
+			Vnew = Vnow[j] + 0.001f/onemsbyTstep*(k1+k2)/2;
+			//Unew = Unow[j] + (Neurons[j].a*(Neurons[j].b*Vnow[j] - Unow[j])) / onemsbyTstep;
+			Vnow[j] = (Vnew > -100)? Vnew:-100;
+			//Unow[j] = Unew;
 
 			//Implementing Network Computation in case a Neuron has spiked in the current interval
-			if (Vnow[j] >= 30.0f){
-				Vnow[j] = 30.0f;
-
+			if (Vnow[j] >= Neurons[j].c){
+				Vnow[j] = 4 * Neurons[j].c;
+			//if (Vnow[j] >= 30.0f){
+			//Vnow[j] = 30.0f;
 				LastSpikedTimeNeuron[j] = time;
 				if (PreSynNeuronSectionBeg[j] >= 0){
 					for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k){
@@ -116,7 +123,7 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		if (Vnow[j] == 30.0){
+		if (Vnow[j] == 4*Neurons[j].c){
 			size_t CurrNeuronSectionBeg = PreSynNeuronSectionBeg[j];
 			size_t CurrNeuronSectionEnd = PreSynNeuronSectionEnd[j];
 			if (CurrNeuronSectionBeg >= 0)
@@ -132,9 +139,9 @@ void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &
 {
 	//Iext function added by Yamini
 	int N = Iext.size();
-	int Ninp = InpCurr.nrows();
+	int Ninp = InpCurr.ncols();
 	for (int i = 0; i < Ninp; ++i){
-		Iext[i] = InpCurr(i, time);
+		Iext[i] = InpCurr(time, i);
 	}
 	//((int)(time / 0.1))
 /*	int N = Iext.size();
@@ -664,6 +671,7 @@ void SimulateParallel(
 			SpikeRecord(
 				Vnow,
 				Network,
+				Neurons,
 				CurrentQueueIndex, QueueSize,
 				PreSynNeuronSectionBeg,
 				PreSynNeuronSectionEnd,
