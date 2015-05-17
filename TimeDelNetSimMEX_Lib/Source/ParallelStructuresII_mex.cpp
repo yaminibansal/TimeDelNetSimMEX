@@ -54,31 +54,24 @@ void CurrentUpdate::operator () (const tbb::blocked_range<int*> &BlockedRange) c
 void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
+
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		if (Vnow[j] == 4*Neurons[j].c){
-		//if (Vnow[j] == 30.0f){
-			//Implementing LIF resetting
-			//Vnow[j] =  Neurons[j].c; 
+		if (Vnow[j] == 4*Neurons[j].c){ 
 			Vnow[j] = Neurons[j].d;
-			//Unow[j] += Neurons[j].d;
 		}
 		else{
 			//Implementing LIF differential equation
-			float Vnew, Unew, k1, k2, Isyn;
-			Isyn = I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17);
-			//Vnew = Vnow[j] + (Vnow[j] * (0.04f*Vnow[j] + 5.0f) + 140.0f - Unow[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / onemsbyTstep;
-			k1 = (Isyn + Iext[j] + StdDev*Irand[j])/Neurons[j].b - Neurons[j].a*(Vnow[j] - Neurons[j].d) / Neurons[j].b;
-			k2 = (Isyn + Iext[j] + StdDev*Irand[j])/Neurons[j].b - Neurons[j].a*(Vnow[j] + k1*0.001f/onemsbyTstep - Neurons[j].d) / Neurons[j].b;
+			float Vnew, Unew, k1, k2, delT;
+			k1 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] - Neurons[j].d) / Neurons[j].b;
+			k2 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] + k1*0.001f / onemsbyTstep - Neurons[j].d) / Neurons[j].b;
 			Vnew = Vnow[j] + 0.001f/onemsbyTstep*(k1+k2)/2;
-			//Unew = Unow[j] + (Neurons[j].a*(Neurons[j].b*Vnow[j] - Unow[j])) / onemsbyTstep;
 			Vnow[j] = (Vnew > -100)? Vnew:-100;
-			//Unow[j] = Unew;
 
 			//Implementing Network Computation in case a Neuron has spiked in the current interval
 			if (Vnow[j] >= Neurons[j].c){
 				Vnow[j] = 4 * Neurons[j].c;
-			//if (Vnow[j] >= 30.0f){
-			//Vnow[j] = 30.0f;
+				SpikeTimes[j].push_back(time);
+
 				LastSpikedTimeNeuron[j] = time;
 				if (PreSynNeuronSectionBeg[j] >= 0){
 					for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k){
@@ -88,22 +81,26 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				//Implementing Causal Learning Rule
 				if (PostSynNeuronSectionBeg[j] >= 0){
 					for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
-						if (Network[AuxArray[k]].Plastic == 1){
+						if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
+							delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart-1];
+							
 							//STDP rule
-							if (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart] <= Neurons[j].tmax*onemsbyTstep*1000){
+							if (delT <= Neurons[j].tmax*onemsbyTstep*1000){
 								Network[AuxArray[k]].Weight += ltp;
 							}
 							else{
 								Network[AuxArray[k]].Weight -= ltd;
 							}
+							//Implementing Metaplasticity by changing tmax
+							if (delT*0.001 / onemsbyTstep < 0.2) {
+								Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + delT*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
+							}//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
+							//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
+							//}
 						}
 					}
 				}
 
-				//Implementing Metaplasticity by changing tmax
-				Neurons[j].tmax += 0.001f;
-				
-					
 			}
 		}
 	}
@@ -247,6 +244,8 @@ void OutputVarsStruct::initialize(const InternalVars &IntVars){
 		this->Itot = MexMatrix<float>(TimeDimLen, N);
 	if (OutputControl & OutOps::TMAX_REQ)
 		this->tmaxOut = MexMatrix<float>(TimeDimLen, N);
+	if (OutputControl & OutOps::SPIKETIMES_REQ)
+		this->SpikeTimesOut = MexVector<MexVector<int> >(N, MexVector<int>());
 }
 void FinalStateStruct::initialize(const InternalVars &IntVars){
 	int OutputControl	= IntVars.OutputControl;
@@ -266,6 +265,7 @@ void FinalStateStruct::initialize(const InternalVars &IntVars){
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
+		this->SpikeTimes = MexVector<MexVector<int> >(N, MexVector<int>());
 		this->tmax = MexVector<float>(N);
 	}
 	this->CurrentQIndex = -1;
@@ -288,6 +288,7 @@ void InitialStateStruct::initialize(const InternalVars &IntVars){
 		this->LSTNeuron = MexVector<int>(N);
 		this->LSTSyn = MexVector<int>(M);
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
+		this->SpikeTimes = MexVector<MexVector<int> >(N, MexVector<int>());
 		this->tmax = MexVector<float>(N);
 	}
 	this->CurrentQIndex = -1;
@@ -363,6 +364,13 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 	if (OutputControl & OutOps::I_TOT_REQ){
 		for (int j = 0; j < N; ++j)
 			OutVars.Itot(CurrentInsertPos, j) = Iext[j] + StdDev*Irand[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17);
+
+	// Storing Spike Times of all Neurons
+		if (OutputControl & OutOps::SPIKETIMES_REQ){
+			OutVars.SpikeTimesOut=SpikeTimes;
+		}
+
+		
 	}
 }
 void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &OutVars){
@@ -434,6 +442,12 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 			for (int j = 0; j < N; ++j)
 				OutVars.Itot(CurrentInsertPos, j) = Iext[j] + StdDev*Irand[j] + I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17);
 		}
+			// Storing Spike Times of all Neurons
+		if (OutputControl & OutOps::SPIKETIMES_REQ){
+			for (int j = 0; j < N; ++j){
+				OutVars.SpikeTimesOut[j] = SpikeTimes[j];
+			}
+		}
 	}
 }
 void InternalVars::DoSingleStateOutput(SingleStateStruct &FinalStateOut){
@@ -458,6 +472,9 @@ void InternalVars::DoSingleStateOutput(SingleStateStruct &FinalStateOut){
 	}
 	for (int j = 0; j < QueueSize; ++j){
 		FinalStateOut.SpikeQueue[j] = SpikeQueue[j];
+	}
+	for (int j = 0; j < N; ++j){
+		FinalStateOut.SpikeTimes[j] = SpikeTimes[j];
 	}
 	FinalStateOut.CurrentQIndex = CurrentQIndex;
 	FinalStateOut.LSTNeuron = LSTNeuron;
@@ -507,6 +524,8 @@ void SimulateParallel(
 
 	float &ltp				= IntVars.ltp;
 	float &ltd				= IntVars.ltd;
+
+	MexVector<MexVector<int> > &SpikeTimes   = IntVars.SpikeTimes;
 
 	const float &I0			= IntVars.I0;	// Value of the current factor to be multd with weights (constant)
 	// calculate value of alpha for filtering
@@ -634,7 +653,7 @@ void SimulateParallel(
 
 		size_t QueueSubEnd = SpikeQueue[CurrentQueueIndex].size();
 		maxSpikeno += QueueSubEnd;
-		// Epilepsy Check
+	/*	// Epilepsy Check
 		if (QueueSubEnd > (2*M) / (5)){
 			epilepsyctr++;
 			if (epilepsyctr > 100){
@@ -645,7 +664,7 @@ void SimulateParallel(
 			#endif
 				return;
 			}
-		}
+		} */
 
 		// This iter calculates Itemp as in above diagram
 		if (SpikeQueue[CurrentQueueIndex].size() != 0)
@@ -657,7 +676,7 @@ void SimulateParallel(
 		// Calculation of V,U[t] from V,U[t-1], Iin = Itemp
 		tbb::parallel_for(tbb::blocked_range<int>(0, N, 100), NeuronSimulate(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
-			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, ltp, ltd, PreSynNeuronSectionBeg,
+			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, ltp, ltd, SpikeTimes, PreSynNeuronSectionBeg,
 			PreSynNeuronSectionEnd, PostSynNeuronSectionBeg,
 			PostSynNeuronSectionEnd, AuxArray, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
 

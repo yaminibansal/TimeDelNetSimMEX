@@ -102,6 +102,10 @@ int getOutputControl(char* OutputControlSequence){
 			OutputControl = AddorRemove ?
 			OutputControl | OutOps::TMAX_REQ :
 			OutputControl & ~(OutOps::TMAX_REQ);
+		if (!_strcmpi(SequenceWord, "SpikeTimes"))
+			OutputControl = AddorRemove ?
+			OutputControl | OutOps::SPIKETIMES_REQ :
+			OutputControl & ~(OutOps::SPIKETIMES_REQ);
 		SequenceWord = strtok_s(NULL, Delims, &NextNonDelim);
 	}
 	return OutputControl;
@@ -342,6 +346,7 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 		"Iin",
 		"Itot",
 		"tmaxOut",
+		"SpikeTimesOut",
 		nullptr
 	};
 
@@ -359,7 +364,8 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 	mxSetField(ReturnPointer, 0, "Itot", assignmxArray(Output.Itot, mxSINGLE_CLASS));
 	// Assigning tmaxout
 	mxSetField(ReturnPointer, 0, "tmaxOut", assignmxArray(Output.tmaxOut, mxSINGLE_CLASS));
-
+	//Assigning SpikeTimes
+	mxSetField(ReturnPointer, 0, "SpikeTimesOut", assignmxArray(Output.SpikeTimesOut, mxINT32_CLASS));
 	return ReturnPointer;
 }
 
