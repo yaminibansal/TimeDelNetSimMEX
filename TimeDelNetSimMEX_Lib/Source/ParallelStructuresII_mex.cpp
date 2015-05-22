@@ -61,7 +61,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 		}
 		else{
 			//Implementing LIF differential equation
-			float Vnew, Unew, k1, k2, delT;
+			float Vnew, Unew, k1, k2, delT, delTmin;
 			k1 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] - Neurons[j].d) / Neurons[j].b;
 			k2 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] + k1*0.001f / onemsbyTstep - Neurons[j].d) / Neurons[j].b;
 			Vnew = Vnow[j] + 0.001f/onemsbyTstep*(k1+k2)/2;
@@ -80,26 +80,37 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				}
 				//Implementing Causal Learning Rule
 				if (PostSynNeuronSectionBeg[j] >= 0){
+					delTmin = 0.2*1000*onemsbyTstep;
 					for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
 						if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
 							delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart-1];
-							
 							//STDP rule
-							if (delT <= Neurons[j].tmax*onemsbyTstep*1000){
+							if (delT <= Neurons[j].tmax*onemsbyTstep * 1000){
 								Network[AuxArray[k]].Weight += ltp;
 							}
 							else{
-								Network[AuxArray[k]].Weight -= ltd;
+								if (Network[AuxArray[k]].Weight - ltd >= 0){
+									Network[AuxArray[k]].Weight -= ltd;
+								}
 							}
-							//Implementing Metaplasticity by changing tmax
-							if (delT*0.001 / onemsbyTstep < 0.2) {
-								Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + delT*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
-							}//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
-							//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
-							//}
+							if (delTmin > delT){
+								delTmin = delT;
+							}
 						}
 					}
 				}
+				//Implementing Metaplasticity by changing tmax (Assuming all delT in one pattern are the same)
+				if (delTmin*0.001 / onemsbyTstep < 0.2) {
+					if (SpikeTimes[j].size() == 1){
+						Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax +  delTmin*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
+					}
+					else{
+						//Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / (3 * SpikeTimes[j].size());
+						Neurons[j].tmax = (Neurons[j].tmax + 5 * delTmin*0.001 / onemsbyTstep) / 6;
+					}
+				}//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
+				//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
+				//}
 
 			}
 		}
