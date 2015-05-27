@@ -54,14 +54,16 @@ void CurrentUpdate::operator () (const tbb::blocked_range<int*> &BlockedRange) c
 void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
-
+	int Ninp = 4;
+	int N = 10;
 	for (int j = RangeBeg; j < RangeEnd; ++j){
 		if (Vnow[j] == 4*Neurons[j].c){ 
 			Vnow[j] = Neurons[j].d;
 		}
 		else{
 			//Implementing LIF differential equation
-			float Vnew, Unew, k1, k2, delT, delTmin;
+			float Vnew, Unew, k1, k2;
+			int delT, delTmin, tmaxtmp;
 			k1 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] - Neurons[j].d) / Neurons[j].b;
 			k2 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] + k1*0.001f / onemsbyTstep - Neurons[j].d) / Neurons[j].b;
 			Vnew = Vnow[j] + 0.001f/onemsbyTstep*(k1+k2)/2;
@@ -85,7 +87,8 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 						if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
 							delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart-1];
 							//STDP rule
-							if (delT <= Neurons[j].tmax*onemsbyTstep * 1000){
+							tmaxtmp = (int) (Neurons[j].tmax*onemsbyTstep * 1000 +0.5f);
+							if (delT <= tmaxtmp){
 								Network[AuxArray[k]].Weight += ltp;
 							}
 							else{
@@ -106,11 +109,21 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					}
 					else{
 						//Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / (3 * SpikeTimes[j].size());
-						Neurons[j].tmax = (Neurons[j].tmax + 5 * delTmin*0.001 / onemsbyTstep) / 6;
+						Neurons[j].tmax = (Neurons[j].tmax + 3 * delTmin*0.001 / onemsbyTstep) / 4;
 					}
 				}//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
 				//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
 				//}
+
+				//Implementing artificial lateral inhibition
+				if (j >= Ninp) {
+					for (int nlat = Ninp; nlat < N; ++nlat){
+						if (nlat != j){
+							Vnow[nlat] = Neurons[j].d;
+						}
+					}
+					break;
+				} 
 
 			}
 		}
@@ -148,23 +161,18 @@ void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &
 	//Iext function added by Yamini
 	int N = Iext.size();
 	int Ninp = InpCurr.ncols();
-	for (int i = 0; i < Ninp; ++i){
-		Iext[i] = InpCurr(time, i);
-	}
-	//((int)(time / 0.1))
-/*	int N = Iext.size();
-	if (time - 0.1 <= 0.015){	//((int)(time / 0.1))*
-		for (int i = 0; i < 100*N/2000; ++i)
-			Iext[i] = 9;
-	}
-	else if (time - 0.8 <= 0.015){	//((int)(time / 0.1))*
-		for (int i = 0; i < 100*N/2000; ++i)
-			Iext[i] = 3;
+	int M_p = 3000, M_on = 1000;
+	int curr_pat = time / M_p;
+	if ((time % M_p) < M_on){
+		for (int i = 0; i < Ninp; ++i){
+			Iext[i] = InpCurr(curr_pat, i);
+		}
 	}
 	else{
-		for (int i = 0; i < 100*N/2000; ++i)
-			Iext[i] = 3;
-	}*/
+		for (int i = 0; i < Ninp; ++i){
+			Iext[i] = 0;
+		}
+	}
 }
 
 void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
@@ -189,7 +197,7 @@ void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
 		TimeDimLen = nSteps;
 	}
 	if (OutputControl & OutOps::WEIGHT_REQ)
-		if (!(IntVars.InterestingSyns.size()))
+		//if (!(IntVars.InterestingSyns.size()))
 			this->WeightOut = MexMatrix<float>(TimeDimLen, M);
 
 	if (OutputControl & OutOps::V_REQ)
@@ -333,8 +341,13 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 	// Storing Weights
 	if (OutputControl & OutOps::WEIGHT_REQ && InterestingSyns.size()){
 		size_t tempSize = InterestingSyns.size();
-		for (int j = 0; j < tempSize; ++j)
+		size_t tempSize2 = Network.size();
+		for (int j = 0; j < tempSize; ++j){
 			OutVars.WeightOut(CurrentInsertPos, j) = Network[InterestingSyns[j]].Weight;
+		}
+		for (int j = 0; j < tempSize2; ++j){
+			StateOut.WeightOut(CurrentInsertPos, j) = Network[j].Weight;
+		}
 	}
 	else if (OutputControl & OutOps::WEIGHT_REQ){
 		for (int j = 0; j < M; ++j)
@@ -412,8 +425,13 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 		// Storing Weights
 		if (OutputControl & OutOps::WEIGHT_REQ && InterestingSyns.size()){
 			size_t tempSize = InterestingSyns.size();
-			for (int j = 0; j < tempSize; ++j)
+			size_t tempSize2 = Network.size();
+			for (int j = 0; j < tempSize; ++j){
 				OutVars.WeightOut(CurrentInsertPos, j) = Network[InterestingSyns[j]].Weight;
+			}
+			for (int j = 0; j < tempSize2; ++j){
+				StateOut.WeightOut(CurrentInsertPos, j) = Network[j].Weight;
+			}
 		}
 		else if (OutputControl & OutOps::WEIGHT_REQ){
 			for (int j = 0; j < M; ++j)
