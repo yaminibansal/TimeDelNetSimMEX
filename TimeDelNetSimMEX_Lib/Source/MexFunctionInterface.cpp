@@ -106,6 +106,10 @@ int getOutputControl(char* OutputControlSequence){
 			OutputControl = AddorRemove ?
 			OutputControl | OutOps::SPIKETIMES_REQ :
 			OutputControl & ~(OutOps::SPIKETIMES_REQ);
+		if (!_strcmpi(SequenceWord, "FiringRates"))
+			OutputControl = AddorRemove ?
+			OutputControl | OutOps::FIRINGRATES_REQ :
+			OutputControl & ~(OutOps::FIRINGRATES_REQ);
 		SequenceWord = strtok_s(NULL, Delims, &NextNonDelim);
 	}
 	return OutputControl;
@@ -201,6 +205,14 @@ void takeInputFromMatlabStruct(mxArray* MatlabInputStruct, InputArgs &InputArgLi
 		genIntPtr[0] = reinterpret_cast<int *>(mxGetData(genmxArrayPtr));
 		InputArgList.InterestingSyns = MexVector<int>(NumElems);
 		InputArgList.InterestingSyns.copyArray(0, genIntPtr[0], NumElems);
+	}
+
+	// Initializing firing rates
+	genmxArrayPtr = mxGetField(MatlabInputStruct, 0, "FiringRates");
+	if (genmxArrayPtr != NULL && !mxIsEmpty(genmxArrayPtr)){
+		InputArgList.FiringRates = MexVector<float>(N);
+		genFloatPtr[0] = reinterpret_cast<float *>(mxGetData(genmxArrayPtr));
+		InputArgList.V.copyArray(0, genFloatPtr[0], N);
 	}
 
 	// Initializing V, U and Iin1, Iin2
@@ -347,6 +359,7 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 		"Itot",
 		"tmaxOut",
 		"SpikeTimesOut",
+		"FiringRatesOut",
 		nullptr
 	};
 
@@ -366,6 +379,8 @@ mxArray * putOutputToMatlabStruct(OutputVarsStruct &Output){
 	mxSetField(ReturnPointer, 0, "tmaxOut", assignmxArray(Output.tmaxOut, mxSINGLE_CLASS));
 	//Assigning SpikeTimes
 	mxSetField(ReturnPointer, 0, "SpikeTimesOut", assignmxArray(Output.SpikeTimesOut, mxINT32_CLASS));
+	//Assigning FiringRatesOut
+	mxSetField(ReturnPointer, 0, "FiringRatesOut", assignmxArray(Output.FiringRatesOut, mxSINGLE_CLASS));
 	return ReturnPointer;
 }
 
@@ -384,6 +399,7 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 		"LSTNeuron",
 		"LSTSyn",
 		"tmax",
+		"FiringRates",
 		nullptr
 	};
 	int NFields = 0;
@@ -415,6 +431,7 @@ mxArray * putStateToMatlabStruct(StateVarsOutStruct &Output){
 	mxSetField(ReturnPointer, 0, "LSTNeuron"     , assignmxArray(Output.LSTNeuronOut, mxINT32_CLASS));
 	mxSetField(ReturnPointer, 0, "LSTSyn"        , assignmxArray(Output.LSTSynOut, mxINT32_CLASS));
 	mxSetField(ReturnPointer, 0, "tmax"			 , assignmxArray(Output.tmaxOut, mxSINGLE_CLASS));
+	mxSetField(ReturnPointer, 0, "FiringRates"   , assignmxArray(Output.FiringRatesOut, mxSINGLE_CLASS));
 
 	return ReturnPointer;
 }
@@ -434,6 +451,7 @@ mxArray * putSingleStatetoMatlabStruct(SingleStateStruct &SingleStateList){
 		"LSTNeuron",
 		"LSTSyn",
 		"tmax",
+		"FiringRates",
 		nullptr
 	};
 	int NFields = 0;
