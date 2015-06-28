@@ -56,7 +56,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	int N = RangeEnd;
-	int Tref = 0 * onemsbyTstep;
+	int Tref = 0 * onemsbyTstep; //Refractory Period
 	
 	for (int j = RangeBeg; j < RangeEnd; ++j){
 		if (Vnow[j] == 4*Neurons[j].c || time - LastSpikedTimeNeuron[j] <= Tref){ 
@@ -83,6 +83,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			if (rand_n < firingrate[j] * 0.001 / onemsbyTstep)
 				Vnow[j] = Neurons[j].c;*/
 
+			//Calculating the firing rates
 
 			//Implementing Network Computation in case a Neuron has spiked in the current interval
 			if (Vnow[j] >= Neurons[j].c){
@@ -97,38 +98,14 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				}
 				//Implementing Causal Learning Rule
 				if (PostSynNeuronSectionBeg[j] >= 0){
-					delTmin = 0.3*1000*onemsbyTstep;
+					delTmin = 0.3 * 1000 * onemsbyTstep;
 					for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
 						if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
-							delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart-1];
-							//STDP rule
-							tmaxtmp = (int) (Neurons[j].tmax*onemsbyTstep * 1000 +0.5f);
-							if (delT <= tmaxtmp){
-								Network[AuxArray[k]].Weight += ltp;
-							}
-							else{
-								if (Network[AuxArray[k]].Weight - ltd >= 0){
-								//if (Network[AuxArray[k]].Weight - ltd >= 0 && delT < 0.2 * 1000 * onemsbyTstep){
-									Network[AuxArray[k]].Weight -= ltd;
-								}
-							}
-							if (delTmin > delT){
-								delTmin = delT;
-							}
-						}
-						if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] == -1) {
-							if (Network[AuxArray[k]].Weight - ltd >= 0){
-								Network[AuxArray[k]].Weight -= ltd;
-							}
+							//Implementing weight update differential equation
 						}
 					}
 				}
-				//Implementing Metaplasticity by changing tmax (Assuming all delT in one pattern are the same)
-				float check = delTmin*0.001 / onemsbyTstep;
-				float N_s = SpikeTimes[j].size();
-				float N_t = 40;
-				float temp1 = (1 - exp(-(N_s - 1) / N_t)) / (1 - exp(-1 / N_t));
-				float temp2 = (1 - exp(-(N_s) / N_t)) / (1 - exp(-1 / N_t));
+				//Implementing Metaplasticity by changing tmax (Here tmax corresponds to the threshold)
 				/*if (delTmin*0.001 / onemsbyTstep < 0.2) {
 					if (N_s == 1){
 						Neurons[j].tmax = Neurons[j].tmax;
@@ -137,18 +114,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 						Neurons[j].tmax = (exp(-1/N_t)*Neurons[j].tmax*temp1 + delTmin*0.001 / onemsbyTstep) / (temp2);
 					}
 				}*/
-				if (delTmin*0.001 / onemsbyTstep < 0.2) {
-					if (SpikeTimes[j].size() == 1){
-						Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax +  delTmin*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
-					}
-					else{
-						//Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / (3 * SpikeTimes[j].size());
-						Neurons[j].tmax = (Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / 3;
-					}
-				}
-				//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
-				//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
-				//}
+
 
 				//Implementing artificial lateral inhibition
 				if (j >= Ninp) {
@@ -198,18 +164,11 @@ void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &
 	Iext[1] = InpCurr(0, 1);*/
 	int N = Iext.size();
 	int Ninp = InpCurr.ncols();
-	int M_p = 3000, M_on = 1000;
+	int M_p = 3000;
 	int curr_pat = time / M_p;
-	if ((time % M_p) < M_on){
 		for (int i = 0; i < Ninp; ++i){
 			Iext[i] = InpCurr(curr_pat, i);
 		}
-	}
-	else{
-		for (int i = 0; i < Ninp; ++i){
-			Iext[i] = 0;
-		}
-	}
 }
 
 void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
@@ -302,6 +261,8 @@ void OutputVarsStruct::initialize(const InternalVars &IntVars){
 		this->tmaxOut = MexMatrix<float>(TimeDimLen, N);
 	if (OutputControl & OutOps::SPIKETIMES_REQ)
 		this->SpikeTimesOut = MexVector<MexVector<int> >(N, MexVector<int>());
+	if (OutputControl & OutOps::FIRRATE_REQ)
+		this->FiringRatesOut = MexVector<float>(N, 0.0);
 }
 void FinalStateStruct::initialize(const InternalVars &IntVars){
 	int OutputControl	= IntVars.OutputControl;
@@ -429,6 +390,14 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 	// Storing Spike Times of all Neurons
 		if (OutputControl & OutOps::SPIKETIMES_REQ){
 			OutVars.SpikeTimesOut=SpikeTimes;
+		}
+
+		// Storing firing rates of all neurons
+		if (OutputControl & OutOps::FIRRATE_REQ){
+			size_t tempSize = Neurons.size();
+			for (int j = 0; j < tempSize; ++j){
+				OutVars.FiringRatesOut(CurrentInsertPos) = FiringRates;
+			}
 		}
 
 		

@@ -34,7 +34,8 @@ struct OutOps{
 		INITIAL_STATE_REQ   = (1 << 14), 
 		FINAL_STATE_REQ     = (1 << 15),
 		TMAX_REQ            = (1 << 16),
-		SPIKETIMES_REQ		= (1 << 17)
+		SPIKETIMES_REQ		= (1 << 17),
+		FIRRATE_REQ		    = (1 << 18)
 	};
 };
 
@@ -266,6 +267,7 @@ struct InternalVars{
 	const int StatusDisplayInterval;
 
 	MexVector<MexVector<int> > SpikeTimes;
+	MexVector<float> FiringRates;
 
 	MexVector<Synapse> &Network;
 	MexVector<Neuron> &Neurons;
@@ -295,6 +297,7 @@ struct InternalVars{
 		ltp(IArgs.ltp),
 		ltd(IArgs.ltd),
 		SpikeTimes(),
+		FiringRates(),
 		Network(IArgs.Network),
 		Neurons(IArgs.Neurons),
 		InpCurr(IArgs.InpCurr),
@@ -408,6 +411,11 @@ struct InternalVars{
 			SpikeTimes = MexVector<MexVector<int> >(N, MexVector<int>());
 		}
 
+		//Initialize Firing Rates
+		if (FiringRates.istrulyempty()){
+			FiringRates = MexVector<float>(N, 0.0);
+		}
+
 
 		// Setting Initial Conditions for LSTs
 		if (LSTNeuron.istrulyempty()){
@@ -443,13 +451,15 @@ struct OutputVarsStruct{
 	MexMatrix<float> Itot;
 	MexMatrix<float> tmaxOut;
 	MexVector<MexVector<int> > SpikeTimesOut;
+	MexMatrix<float> FiringRatesOut;
 
 	OutputVarsStruct() :
 		WeightOut(),
 		Itot(),
 		Iin(),
 		tmaxOut(),
-		SpikeTimesOut() {}
+		SpikeTimesOut(),
+		FiringRatesOut() {}
 
 	void initialize(const InternalVars &);
 };
