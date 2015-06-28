@@ -272,9 +272,6 @@ void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
 
 	if (OutputControl & OutOps::TMAX_REQ)
 		this->tmaxOut = MexMatrix<float>(TimeDimLen, N);
-
-	if (OutputControl & OutOps::FIRINGRATES_REQ)
-		this->FiringRatesOut = MexMatrix<float>(TimeDimLen, N);
 }
 void OutputVarsStruct::initialize(const InternalVars &IntVars){
 	int TimeDimLen;
@@ -305,8 +302,6 @@ void OutputVarsStruct::initialize(const InternalVars &IntVars){
 		this->tmaxOut = MexMatrix<float>(TimeDimLen, N);
 	if (OutputControl & OutOps::SPIKETIMES_REQ)
 		this->SpikeTimesOut = MexVector<MexVector<int> >(N, MexVector<int>());
-	if (OutputControl & OutOps::FIRINGRATES_REQ)
-		this->FiringRatesOut = MexMatrix<float>(TimeDimLen, N);
 }
 void FinalStateStruct::initialize(const InternalVars &IntVars){
 	int OutputControl	= IntVars.OutputControl;
@@ -328,7 +323,6 @@ void FinalStateStruct::initialize(const InternalVars &IntVars){
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
 		this->SpikeTimes = MexVector<MexVector<int> >(N, MexVector<int>());
 		this->tmax = MexVector<float>(N);
-		this->FiringRates = MexVector<float>(N);
 	}
 	this->CurrentQIndex = -1;
 	this->Time = -1;
@@ -352,7 +346,6 @@ void InitialStateStruct::initialize(const InternalVars &IntVars){
 		this->SpikeQueue = MexVector<MexVector<int> >(DelayRange*onemsbyTstep, MexVector<int>());
 		this->SpikeTimes = MexVector<MexVector<int> >(N, MexVector<int>());
 		this->tmax = MexVector<float>(N);
-		this->FiringRates = MexVector<float>(N);
 	}
 	this->CurrentQIndex = -1;
 	this->Time = -1;
@@ -405,12 +398,6 @@ void InternalVars::DoSparseOutput(StateVarsOutStruct &StateOut, OutputVarsStruct
 			OutVars.tmaxOut(CurrentInsertPos, j) = Neurons[j].tmax;
 			StateOut.tmaxOut(CurrentInsertPos, j) = Neurons[j].tmax;
 		}
-	}
-
-	// Storing firing rates
-	if (OutputControl & OutOps::FIRINGRATES_REQ){
-		OutVars.FiringRatesOut[CurrentInsertPos] = FiringRates;
-		StateOut.FiringRatesOut[CurrentInsertPos] = FiringRates;
 	}
 
 
@@ -497,12 +484,6 @@ void InternalVars::DoFullOutput(StateVarsOutStruct &StateOut, OutputVarsStruct &
 			}
 		}
 
-		// Storing tmax
-		if (OutputControl & OutOps::FIRINGRATES_REQ){
-			OutVars.FiringRatesOut[CurrentInsertPos] = FiringRates;
-			StateOut.FiringRatesOut[CurrentInsertPos] = FiringRates;
-		}
-
 		// Storing Spike Queue related state informations
 		if (OutputControl & OutOps::SPIKE_QUEUE_REQ)
 			for (int j = 0; j < QueueSize; ++j)
@@ -555,9 +536,6 @@ void InternalVars::DoSingleStateOutput(SingleStateStruct &FinalStateOut){
 	for (int j = 0; j < N; ++j){
 		FinalStateOut.tmax[j] = Neurons[j].tmax;
 	}
-	for (int j = 0; j < N; ++j){
-		FinalStateOut.FiringRates[j] = FiringRates[j];
-	}
 	for (int j = 0; j < QueueSize; ++j){
 		FinalStateOut.SpikeQueue[j] = SpikeQueue[j];
 	}
@@ -598,7 +576,6 @@ void SimulateParallel(
 	MexVector<MexVector<int> >	&SpikeQueue				= IntVars.SpikeQueue;
 	MexVector<int>				&LastSpikedTimeNeuron	= IntVars.LSTNeuron;
 	MexVector<int>				&LastSpikedTimeSyn		= IntVars.LSTSyn;
-	MexVector<float>            &FiringRates			= IntVars.FiringRates;
 	
 
 	int &NoOfms				= IntVars.NoOfms;
@@ -767,7 +744,7 @@ void SimulateParallel(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
 			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, ltp, ltd, Ninp, SpikeTimes, PreSynNeuronSectionBeg,
 			PreSynNeuronSectionEnd, PostSynNeuronSectionBeg,
-			PostSynNeuronSectionEnd, AuxArray, NAdditionalSpikesNow, LastSpikedTimeNeuron, FiringRates), apNeuronSim);
+			PostSynNeuronSectionEnd, AuxArray, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
 
 		/////// This is code to extend vectors before they are written to.
 		for (int k = 0; k < QueueSize; ++k){

@@ -34,8 +34,7 @@ struct OutOps{
 		INITIAL_STATE_REQ   = (1 << 14), 
 		FINAL_STATE_REQ     = (1 << 15),
 		TMAX_REQ            = (1 << 16),
-		SPIKETIMES_REQ		= (1 << 17),
-		FIRINGRATES_REQ		= (1 << 18)
+		SPIKETIMES_REQ		= (1 << 17)
 	};
 };
 
@@ -86,7 +85,6 @@ struct NeuronSimulate{
 	MexVector<int> AuxArray;
 	atomicIntVect &NAdditionalSpikesNow;
 	MexVector<int> &LastSpikedTimeNeuron;
-	MexVector<float> &FiringRates;
 
 	NeuronSimulate(
 		MexVector<float> &Vnow_,
@@ -110,8 +108,7 @@ struct NeuronSimulate{
 		MexVector<size_t> &PostSynNeuronSectionEnd_,
 		MexVector<int> &AuxArray_,
 		atomicIntVect &NAdditionalSpikesNow_,
-		MexVector<int> &LastSpikedTimeNeuron_,
-		MexVector<float> &FiringRates_
+		MexVector<int> &LastSpikedTimeNeuron_
 		) :
 		Vnow(Vnow_),
 		Unow(Unow_),
@@ -134,8 +131,7 @@ struct NeuronSimulate{
 		PostSynNeuronSectionEnd(PostSynNeuronSectionEnd_),
 		AuxArray(AuxArray_),
 		NAdditionalSpikesNow(NAdditionalSpikesNow_),
-		LastSpikedTimeNeuron(LastSpikedTimeNeuron_),
-		FiringRates(FiringRates_)
+		LastSpikedTimeNeuron(LastSpikedTimeNeuron_)
 	{};
 	void operator() (tbb::blocked_range<int> &Range) const;
 };
@@ -213,8 +209,6 @@ struct InputArgs{
 
 	MexVector<uint32_t> GenState;
 	MexVector<float> Irand;
-
-	MexVector<float> FiringRates;
 	
 	MexVector<MexVector<int> > SpikeQueue;
 	MexVector<int> LSTNeuron;
@@ -243,8 +237,7 @@ struct InputArgs{
 		Irand(),
 		SpikeQueue(),
 		LSTNeuron(),
-		LSTSyn(),
-		FiringRates() {}
+		LSTSyn() {}
 };
 
 struct InternalVars{
@@ -287,7 +280,6 @@ struct InternalVars{
 	MexVector<MexVector<int> > &SpikeQueue;
 	MexVector<int> &LSTNeuron;
 	MexVector<int> &LSTSyn;
-	MexVector<float> &FiringRates;
 
 	InternalVars(InputArgs &IArgs) :
 		N(IArgs.Neurons.size()),
@@ -316,7 +308,6 @@ struct InternalVars{
 		SpikeQueue(IArgs.SpikeQueue),
 		LSTNeuron(IArgs.LSTNeuron),
 		LSTSyn(IArgs.LSTSyn),
-		FiringRates(IArgs.FiringRates),
 		onemsbyTstep(IArgs.onemsbyTstep),
 		NoOfms(IArgs.NoOfms),
 		DelayRange(IArgs.DelayRange),
@@ -417,10 +408,6 @@ struct InternalVars{
 			SpikeTimes = MexVector<MexVector<int> >(N, MexVector<int>());
 		}
 
-		//Initializing Firing rates
-		if (FiringRates.istrulyempty()){
-			FiringRates = MexVector<float>(N, 0.0);
-		}
 
 		// Setting Initial Conditions for LSTs
 		if (LSTNeuron.istrulyempty()){
@@ -456,15 +443,13 @@ struct OutputVarsStruct{
 	MexMatrix<float> Itot;
 	MexMatrix<float> tmaxOut;
 	MexVector<MexVector<int> > SpikeTimesOut;
-	MexMatrix<float> FiringRatesOut;
 
 	OutputVarsStruct() :
 		WeightOut(),
 		Itot(),
 		Iin(),
 		tmaxOut(),
-		SpikeTimesOut(),
-		FiringRatesOut() {}
+		SpikeTimesOut() {}
 
 	void initialize(const InternalVars &);
 };
@@ -485,7 +470,6 @@ struct StateVarsOutStruct{
 	MexMatrix<int> LSTNeuronOut;
 	MexMatrix<int> LSTSynOut;
 	MexMatrix<float> tmaxOut;
-	MexMatrix<float> FiringRatesOut;
 
 	StateVarsOutStruct() :
 		WeightOut(),
@@ -500,8 +484,7 @@ struct StateVarsOutStruct{
 		CurrentQIndexOut(),
 		LSTNeuronOut(),
 		LSTSynOut(),
-		tmaxOut(),
-		FiringRatesOut() {}
+		tmaxOut() {}
 
 	void initialize(const InternalVars &);
 };
@@ -521,7 +504,6 @@ struct SingleStateStruct{
 	MexVector<int> LSTNeuron;
 	MexVector<int> LSTSyn;
 	MexVector<float> tmax;
-	MexVector<float> FiringRates;
 	int Time;
 	int CurrentQIndex;
 
@@ -537,8 +519,7 @@ struct SingleStateStruct{
 		LSTNeuron(),
 		LSTSyn(), 
 		tmax(),
-		SpikeTimes(),
-		FiringRates() {}
+		SpikeTimes() {}
 
 	virtual void initialize(const InternalVars &) {}
 };
