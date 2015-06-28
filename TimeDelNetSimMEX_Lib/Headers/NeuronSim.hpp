@@ -73,7 +73,7 @@ struct NeuronSimulate{
 	MexVector<float> &Iext;
 	MexVector<Neuron> &Neurons;
 	MexVector<Synapse> &Network;
-	int CurrentQueueIndex, QueueSize, onemsbyTstep, time;
+	int CurrentQueueIndex, QueueSize, onemsbyTstep, time, Ninp;
 	float StdDev;
 	float I0;
 	float ltp, ltd;
@@ -100,6 +100,7 @@ struct NeuronSimulate{
 		float StdDev_,
 		float I0_,
 		float ltp_, float ltd_,
+		int Ninp_,
 		MexVector<MexVector<int> > &SpikeTimes_,
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
@@ -122,6 +123,7 @@ struct NeuronSimulate{
 		StdDev(StdDev_),
 		I0(I0_),
 		ltp(ltp_), ltd(ltd_),
+		Ninp(Ninp_),
 		SpikeTimes(SpikeTimes_),
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
@@ -241,6 +243,7 @@ struct InputArgs{
 struct InternalVars{
 	int N;
 	int M;
+	int Ninp; //Number of neurons ([1,Ninp]) that recieve external input current
 	int i;	//This is the most important loop index that is definitely a state variable
 			// and plays a crucial role in deciding the index into which the output must be performed
 	int Time;	// must be initialized befor beta
@@ -281,6 +284,7 @@ struct InternalVars{
 	InternalVars(InputArgs &IArgs) :
 		N(IArgs.Neurons.size()),
 		M(IArgs.Network.size()),
+		Ninp(IArgs.InpCurr.ncols()),
 		i(0),
 		Time(IArgs.Time),
 		// beta defined conditionally below
@@ -307,7 +311,7 @@ struct InternalVars{
 		onemsbyTstep(IArgs.onemsbyTstep),
 		NoOfms(IArgs.NoOfms),
 		DelayRange(IArgs.DelayRange),
-		//I0(0.01f),
+		//I0(0.0f),
 		I0(0.000000001f),
 		CurrentDecayFactor1(powf(0.9355, 2.0f / onemsbyTstep)),
 		//CurrentDecayFactor1(0.9672),
