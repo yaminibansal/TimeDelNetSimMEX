@@ -83,6 +83,8 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			if (rand_n < firingrate[j] * 0.001 / onemsbyTstep)
 				Vnow[j] = Neurons[j].c;*/
 
+			//Calculating Firing rates
+			FiringRates[j] = Vnow[j];
 
 			//Implementing Network Computation in case a Neuron has spiked in the current interval
 			if (Vnow[j] >= Neurons[j].c){
