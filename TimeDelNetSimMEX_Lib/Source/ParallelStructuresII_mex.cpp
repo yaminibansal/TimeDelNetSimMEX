@@ -56,7 +56,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	int N = RangeEnd;
-	int Tref = 0 * onemsbyTstep;
+	int Tref = 2 * onemsbyTstep;
 	
 	for (int j = RangeBeg; j < RangeEnd; ++j){
 		if (Vnow[j] == 4*Neurons[j].c || time - LastSpikedTimeNeuron[j] <= Tref){ 
