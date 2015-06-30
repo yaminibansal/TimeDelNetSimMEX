@@ -6,6 +6,7 @@ struct Synapse{
 	float	Weight;
 	int	DelayinTsteps;
 	int Plastic;
+	bool STDPcount;
 };
 
 struct Neuron{

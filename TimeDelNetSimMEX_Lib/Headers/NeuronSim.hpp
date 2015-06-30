@@ -197,7 +197,7 @@ struct OutputVarsStruct;
 
 
 struct InputArgs{
-	static void IExtFunc(int, MexMatrix<float> &, MexVector<float> &);
+	static void IExtFunc(int, MexMatrix<float> &, MexVector<float> &, MexVector<int> &);
 	MexVector<Synapse> Network;
 	MexVector<Neuron> Neurons;
 	MexMatrix<float> InpCurr;
@@ -266,6 +266,7 @@ struct InternalVars{
 	const int StatusDisplayInterval;
 
 	MexVector<MexVector<int> > SpikeTimes;
+	MexVector<int> IextPtr;
 
 	MexVector<Synapse> &Network;
 	MexVector<Neuron> &Neurons;
@@ -305,6 +306,7 @@ struct InternalVars{
 		Iin2(N),
 		Irand(),	// Irand defined separately.
 		Iext(N, 0.0f),
+		IextPtr(N, 0),
 		SpikeQueue(IArgs.SpikeQueue),
 		LSTNeuron(IArgs.LSTNeuron),
 		LSTSyn(IArgs.LSTSyn),
