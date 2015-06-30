@@ -59,7 +59,38 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int Tref = 0 * onemsbyTstep;
 	
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		if (Vnow[j] == 4*Neurons[j].c || time - LastSpikedTimeNeuron[j] <= Tref){ 
+		
+		if (PostSynNeuronSectionBeg[j] >= 0){
+			
+			FiringRates[j] = 0;
+			for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
+				//Implementing a linear neuron
+				FiringRates[j] += Network[AuxArray[k]].Weight*Iext[k];
+
+				//Updating weights
+				Network[AuxArray[k]].Weight += (Iext[k] * FiringRates[j] * (FiringRates[j] - pow(Neurons[j].tmax, 1.01)))*0.001;
+
+			}
+
+			//Updating average
+			float N_t = 20; //Time constant for averaging of threshold
+			float temp1 = (1 - exp(-((float)(time) - 1) / N_t)) / (1 - exp(-1 / N_t));
+			float temp2 = (1 - exp(-((float)(time)) / N_t)) / (1 - exp(-1 / N_t));
+			if (time == 1){
+				Neurons[j].tmax = pow(FiringRates[j], 1);
+			}
+			else{
+				//Neurons[j].tmax = (pow(FiringRates[j], 1) - Neurons[j].tmax)*0.01 + Neurons[j].tmax;
+				Neurons[j].tmax = (exp(-1 / N_t)*Neurons[j].tmax*temp1 + (pow(FiringRates[j], 1))) / (temp2);
+			}
+
+		}
+
+		
+
+
+
+/*		if (Vnow[j] == 4*Neurons[j].c || time - LastSpikedTimeNeuron[j] <= Tref){ 
 			Vnow[j] = Neurons[j].d;
 		}
 		else{
@@ -81,7 +112,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			float rand_n;
 			rand_n = dis(gen);
 			if (rand_n < firingrate[j] * 0.001 / onemsbyTstep)
-				Vnow[j] = Neurons[j].c;*/
+				Vnow[j] = Neurons[j].c;//
 
 			//Calculating Firing rates
 			FiringRates[j] = Vnow[j];
@@ -138,7 +169,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					else{
 						Neurons[j].tmax = (exp(-1/N_t)*Neurons[j].tmax*temp1 + delTmin*0.001 / onemsbyTstep) / (temp2);
 					}
-				}*/
+				}////
 				if (delTmin*0.001 / onemsbyTstep < 0.2) {
 					if (SpikeTimes[j].size() == 1){
 						Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax +  delTmin*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
@@ -163,7 +194,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				} 
 
 			}
-		}
+		}*/
 	}
 }
 void CurrentAttenuate::operator() (tbb::blocked_range<int> &Range) const {
@@ -200,18 +231,18 @@ void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &
 	Iext[1] = InpCurr(0, 1);*/
 	int N = Iext.size();
 	int Ninp = InpCurr.ncols();
-	int M_p = 3000, M_on = 1000;
-	int curr_pat = time / M_p;
-	if ((time % M_p) < M_on){
+//	int M_p = 3000, M_on = 1000;
+	int curr_pat = time;
+//	if ((time % M_p) < M_on){
 		for (int i = 0; i < Ninp; ++i){
 			Iext[i] = InpCurr(curr_pat, i);
 		}
-	}
-	else{
-		for (int i = 0; i < Ninp; ++i){
-			Iext[i] = 0;
-		}
-	}
+//	}
+//	else{
+//		for (int i = 0; i < Ninp; ++i){
+//			Iext[i] = 0;
+//		}
+//	}
 }
 
 void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
