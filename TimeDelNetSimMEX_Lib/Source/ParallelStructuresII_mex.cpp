@@ -68,7 +68,16 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				FiringRates[j] += Network[AuxArray[k]].Weight*Iext[k];
 
 				//Updating weights
-				Network[AuxArray[k]].Weight += (Iext[k] * FiringRates[j] * (FiringRates[j] - pow(Neurons[j].tmax, 1.01)))*0.001;
+				Network[AuxArray[k]].Weight += (Iext[k] * FiringRates[j] * (FiringRates[j] - pow(Neurons[j].tmax, 1.0)))*0.01;
+				/*if (Iext[k] == 1 && FiringRates[j]>0 && FiringRates[j] > pow(Neurons[j].tmax, 1.0)){			
+					Network[AuxArray[k]].Weight += 0.01;
+				}
+				//if (Iext[k] == 1 && FiringRates[j]>0 && FiringRates[j] < pow(Neurons[j].tmax, 1.0))
+				if (FiringRates[j]>0 && FiringRates[j] < pow(Neurons[j].tmax, 1.0))
+				{
+					Network[AuxArray[k]].Weight -= 0.01;
+				}*/
+			
 
 			}
 
@@ -77,11 +86,11 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			float temp1 = (1 - exp(-((float)(time) - 1) / N_t)) / (1 - exp(-1 / N_t));
 			float temp2 = (1 - exp(-((float)(time)) / N_t)) / (1 - exp(-1 / N_t));
 			if (time == 1){
-				Neurons[j].tmax = pow(FiringRates[j], 1);
+				Neurons[j].tmax = 0;// pow(FiringRates[j], 2)*0.1;
 			}
 			else{
-				//Neurons[j].tmax = (pow(FiringRates[j], 1) - Neurons[j].tmax)*0.01 + Neurons[j].tmax;
-				Neurons[j].tmax = (exp(-1 / N_t)*Neurons[j].tmax*temp1 + (pow(FiringRates[j], 1))) / (temp2);
+				Neurons[j].tmax = (pow(FiringRates[j], 2) - Neurons[j].tmax)*0.1 + Neurons[j].tmax;
+				//Neurons[j].tmax = (exp(-1 / N_t)*Neurons[j].tmax*temp1 + (pow(FiringRates[j], 1))) / (temp2);
 			}
 
 		}
