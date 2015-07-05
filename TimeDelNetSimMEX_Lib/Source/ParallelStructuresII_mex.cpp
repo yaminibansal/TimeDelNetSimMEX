@@ -139,11 +139,11 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				}*/
 				if (delTmin*0.001 / onemsbyTstep < 0.2) {
 					if (SpikeTimes[j].size() == 1){
-						Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax +  delTmin*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
+						Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax +  pow(delTmin*0.001 / onemsbyTstep, 1)) / (SpikeTimes[j].size());
 					}
 					else{
 						//Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / (3 * SpikeTimes[j].size());
-						Neurons[j].tmax = (Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / 3;
+						Neurons[j].tmax = (Neurons[j].tmax + 2 * pow(delTmin*0.001 / onemsbyTstep, 1)) / 3;
 					}
 				}
 				//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
