@@ -104,7 +104,8 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					if (Network[k].Plastic == 1 && LastSpikedTimeNeuron[Network[k].NEnd - 1] != -1 && Network[k].STDPcount){
 						Network[k].STDPcount = false;
 						delT = time - LastSpikedTimeNeuron[Network[k].NEnd - 1];
-						tmaxtmp = (int)(Neurons[j].tmax*onemsbyTstep * 1000 + 0.5f)*ltp/(ltd*0.9);
+						//tmaxtmp = (int)(Neurons[j].tmax*onemsbyTstep * 1000 + 0.5f)*ltp/(ltd*0.9);
+						tmaxtmp = (int)(0.0168*onemsbyTstep * 1000 + 0.5f);
 						if (delT <= tmaxtmp && Network[k].Weight - ltd >= 0 ){
 							Network[k].Weight -= ltd;
 						}
@@ -123,7 +124,8 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
 						delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1];
 						//STDP rule
-						tmaxtmp = (int)(Neurons[j].tmax*onemsbyTstep * 1000 + 0.5f);
+						//tmaxtmp = (int)(Neurons[j].tmax*onemsbyTstep * 1000 + 0.5f);
+						tmaxtmp = (int)(0.01*onemsbyTstep * 1000 + 0.5f);
 						if (delT <= tmaxtmp){
 							Network[AuxArray[k]].Weight += ltp;
 						}
@@ -144,7 +146,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					}*/	
 				}
 				//Implementing Metaplasticity by changing tmax (Assuming all delT in one pattern are the same)
-				float N_s = SpikeTimes[j].size();
+				/*float N_s = SpikeTimes[j].size();
 				float N_t = 5;
 				float temp1 = (1 - exp(-(N_s - 1) / N_t)) / (1 - exp(-1 / N_t));
 				float temp2 = (1 - exp(-(N_s) / N_t)) / (1 - exp(-1 / N_t));
@@ -155,7 +157,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					else{
 						Neurons[j].tmax = (exp(-1 / N_t)*Neurons[j].tmax*temp1 + delTmin*0.001 / onemsbyTstep) / (temp2);
 					}
-				}
+				}*/
 
 				/*if (SpikeTimes[j].size() == 1){
 				Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + delT*0.001 / onemsbyTstep) / (SpikeTimes[j].size());
