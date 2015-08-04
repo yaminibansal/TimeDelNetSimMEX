@@ -56,27 +56,40 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	int N = RangeEnd;
-	int Tref = 0 * onemsbyTstep;
-	
+	int Tref = 2 * onemsbyTstep;
 	
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		SpikeTimes[j].push_back(time);
-		/*//If input neuron, the rate is given by Iext
-		//If output neuron, evaluate the rate r(t)
-		if (j >= Ninp){
-			Vnow[j] = Neurons[j].tmax; //w_k0
-			if (PostSynNeuronSectionBeg[j] >= 0){
-				for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
-					//if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1 && (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) <= (int)(Neurons[j].a*onemsbyTstep * 1000 + 0.5f)){
-						Vnow[j] += Network[AuxArray[k]].Weight; //w_ki*y_i
-					//}
+		
+		//If input neuron, check time has become arrival time from Iext 
+		if (j < Ninp){
+			if (Iext[j] == 1){
+				Vnow[j] = 4*Neurons[j].c;
+			}
+			else{
+				Vnow[j] = Neurons[j].d;
+			}
+		}
+		//Else, continue membrane potential calculation
+		else{
+			if (Vnow[j] == 4 * Neurons[j].c || time - LastSpikedTimeNeuron[j] <= Tref){
+				Vnow[j] = Neurons[j].d;
+			}
+			else{
+				//Implementing LIF differential equation
+				float Vnew, Unew, k1, k2;
+				
+				k1 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] - Neurons[j].d) / Neurons[j].b;
+				k2 = (I0*(float)(Iin2[j] - Iin1[j]) / (1 << 17) + Iext[j] + StdDev*Irand[j]) / Neurons[j].b - Neurons[j].a*(Vnow[j] + k1*0.001f / onemsbyTstep - Neurons[j].d) / Neurons[j].b;
+				Vnew = Vnow[j] + 0.001f / onemsbyTstep*(k1 + k2) / 2;
+				Vnow[j] = (Vnew > -100) ? Vnew : -100;
+
+				if (Vnow[j] >= Neurons[j].c){
+					Vnow[j] = 4 * Neurons[j].c;
 				}
 			}
-		}*/
-		
-		
+		}
 
-	/*	//If spike....
+		//If spike....
 		if (Vnow[j] == 4 * Neurons[j].c){
 			SpikeTimes[j].push_back(time);
 
@@ -90,11 +103,12 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					//Implementing anti-causal learning rule
 					if (Network[k].Plastic == 1 && LastSpikedTimeNeuron[Network[k].NEnd - 1] != -1 && Network[k].STDPcount){
 						Network[k].STDPcount = false;
-						//delT = time - LastSpikedTimeNeuron[Network[k].NEnd - 1];
+						delT = time - LastSpikedTimeNeuron[Network[k].NEnd - 1];
 						//tmaxtmp = (int)(Neurons[j].tmax*onemsbyTstep * 1000 + 0.5f)*ltp/(ltd*0.9);
-						//if (delT <= tmaxtmp && Network[k].Weight - ltd >= 0 ){
+						tmaxtmp = (int)(0.0168*onemsbyTstep * 1000 + 0.5f);
+						if (delT <= tmaxtmp && Network[k].Weight - ltd >= 0 ){
 							Network[k].Weight -= ltd;
-						//}
+						}
 					}
 
 
@@ -120,7 +134,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 							if (Network[AuxArray[k]].Weight - ltd >= 0 && delT < 0.2 * 1000 * onemsbyTstep){
 								Network[AuxArray[k]].Weight -= ltd;
 							}
-						}*__/	
+						}*/	
 					}
 					if (delTmin > delT){
 						delTmin = delT;
@@ -129,7 +143,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 						if (Network[AuxArray[k]].Weight - ltd >= 0){
 							Network[AuxArray[k]].Weight -= ltd;
 						}
-					}*__/	
+					}*/	
 				}
 				//Implementing Metaplasticity by changing tmax (Assuming all delT in one pattern are the same)
 				/*float N_s = SpikeTimes[j].size();
@@ -151,7 +165,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				else{
 				//Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / (3 * SpikeTimes[j].size());
 				Neurons[j].tmax = (Neurons[j].tmax + 2 * delT*0.001 / onemsbyTstep) / 3;
-				}*__/
+				}*/
 				//}
 				//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
 				//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
@@ -311,18 +325,15 @@ void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &
 	Iext[1] = InpCurr(0, 1);*/
 	int N = Iext.size();
 	int Ninp = InpCurr.ncols();
-	int patTotTime = 5000, patONtime = 4000;
-	int curr_pat = time / patTotTime;
-	/*if ((time % patTotTime) < patONtime){
-		for (int i = 0; i < Ninp; ++i){
-			Iext[i] = InpCurr(curr_pat, i);
+	for (int i = 0; i < Ninp; ++i){
+		if (InpCurr(IextPtr[i], i) == time){
+			Iext[i] = 1;
+			IextPtr[i] += 1;
 		}
-	}
-	else{
-		for (int i = 0; i < Ninp; ++i){
+		else{
 			Iext[i] = 0;
 		}
-	}*/
+	}
 }
 
 void StateVarsOutStruct::initialize(const InternalVars &IntVars) {
