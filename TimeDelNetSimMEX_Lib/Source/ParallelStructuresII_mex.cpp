@@ -1,5 +1,5 @@
 #include <vector>
-//#include <random>
+#include <random>
 #include <iostream>
 #include <tbb\parallel_for.h>
 #include <tbb\blocked_range.h>
@@ -56,11 +56,85 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	int N = RangeEnd;
-	int Tref = 2 * onemsbyTstep;
+	int Tref = 0 * onemsbyTstep;
 	
+	//For all neurons, generate stochastic spike dependent on Iext[j]
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		
-		//If input neuron, check time has become arrival time from Iext 
+		std::random_device rd;
+		std::mt19937 gen(rd());
+		std::uniform_real_distribution<> dis(0, 1);
+		float rand_n;
+		rand_n = dis(gen);
+		if (rand_n < (float)(Iext[j] * 0.001 / onemsbyTstep)){
+			//Vnow[j] = Neurons[j].c; //Vnow is useless in this implementation
+			LastSpikedTimeNeuron[j] = time;
+		}
+
+		float eta;
+
+		//For output neurons, update the membrane potential depending on LST of fan-ins
+		if (j >= Ninp && j!=N-1){
+			Vnow[j] = Neurons[j].tmax;
+			if (PostSynNeuronSectionBeg[j] >= 0){
+				for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
+					if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1 && (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) <= (int)(1000 * onemsbyTstep*Neurons[j].a + 0.5f)){
+						Vnow[j] += Network[AuxArray[k]].Weight;
+					}
+				}
+			}
+			Iext[j] = exp(Vnow[j]);
+			//tmax (Neuron threshold update): Threshold decreases uniformly at all times
+			//Efficiency
+			
+			if (SpikeTimes[j].size() > 0){
+				eta = 1 / (float)(SpikeTimes[j].size());
+			}
+			else
+			{
+				eta = 0;
+			}
+
+			//Neurons[j].tmax += - eta*0.1;
+		}
+
+		//If spike:
+		if (LastSpikedTimeNeuron[j] == time){
+			//Store in SpikeBuffer and SpikeTimes
+			SpikeTimes[j].push_back(time);
+			
+			/*NEW //This part is not required for this implementation as we aren't using the spike buffer
+			if (PreSynNeuronSectionBeg[j] >= 0){
+				for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k){
+					NAdditionalSpikesNow[(CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize].fetch_and_increment();
+				}
+			}NEW*/
+
+			// Causal STDP
+			if (PostSynNeuronSectionBeg[j] >= 0 && j >= Ninp){
+				int delT, sigma;
+				for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
+					if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
+						delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1];
+						//STDP rule
+						sigma = (int)(Neurons[j].a*onemsbyTstep * 1000 + 0.5f);
+						if (delT <= sigma){
+							Network[AuxArray[k]].Weight += eta*(ltp*exp(-Network[AuxArray[k]].Weight) - 1);
+						}
+						else{
+							//if (Network[AuxArray[k]].Weight - ltd >= 0){
+								Network[AuxArray[k]].Weight -= eta*ltd;
+							//}
+						}
+						if (Network[AuxArray[k]].Weight < 0){
+							Network[AuxArray[k]].Weight = 0;
+						}
+					}
+				}
+				//tmax (Neuron threshold update): If there is a spike, it increases
+				//Neurons[j].tmax += eta*exp(-Neurons[j].tmax);
+			}
+		}		
+		/* //If input neuron, check time has become arrival time from Iext 
 		if (j < Ninp){
 			if (Iext[j] == 1){
 				Vnow[j] = 4*Neurons[j].c;
@@ -134,7 +208,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 							if (Network[AuxArray[k]].Weight - ltd >= 0 && delT < 0.2 * 1000 * onemsbyTstep){
 								Network[AuxArray[k]].Weight -= ltd;
 							}
-						}*/	
+						}*__/	
 					}
 					if (delTmin > delT){
 						delTmin = delT;
@@ -143,7 +217,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 						if (Network[AuxArray[k]].Weight - ltd >= 0){
 							Network[AuxArray[k]].Weight -= ltd;
 						}
-					}*/	
+					}*__/	
 				}
 				//Implementing Metaplasticity by changing tmax (Assuming all delT in one pattern are the same)
 				/*float N_s = SpikeTimes[j].size();
@@ -165,7 +239,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 				else{
 				//Neurons[j].tmax = ((SpikeTimes[j].size() - 1)*Neurons[j].tmax + 2 * delTmin*0.001 / onemsbyTstep) / (3 * SpikeTimes[j].size());
 				Neurons[j].tmax = (Neurons[j].tmax + 2 * delT*0.001 / onemsbyTstep) / 3;
-				}*/
+				}*__/
 				//}
 				//if (Neurons[j].tmax > 1.05*delT*0.001 / onemsbyTstep){
 				//	Neurons[j].tmax = 1.05*delT*0.001 / onemsbyTstep;
@@ -289,6 +363,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 
 			}
 		}*/
+		
 	}
 }
 void CurrentAttenuate::operator() (tbb::blocked_range<int> &Range) const {
@@ -320,15 +395,15 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 }
 void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &Iext, MexVector<int> &IextPtr)
 {
-	//Iext function added by Yamini
-	/*Iext[0] = InpCurr(0, 0);
-	Iext[1] = InpCurr(0, 1);*/
-	int N = Iext.size();
+	// patTime = Time for 1 datapoint
+	// patONTime = patTime - margin time (10 ms cuz order of membrane potential time const)
+	int patTime = 50, patONTime = 40;
+	int currPat = time / patTime;
 	int Ninp = InpCurr.ncols();
 	for (int i = 0; i < Ninp; ++i){
-		if (InpCurr(IextPtr[i], i) == time){
-			Iext[i] = 1;
-			IextPtr[i] += 1;
+		//if (InpCurr(IextPtr[i], i) == time){
+		if (time % patTime < patONTime){
+			Iext[i] = InpCurr(currPat, i);
 		}
 		else{
 			Iext[i] = 0;
@@ -865,7 +940,7 @@ void SimulateParallel(
 		SpikeQueue[CurrentQueueIndex].clear();
 
 		// Calculation of V,U[t] from V,U[t-1], Iin = Itemp
-		tbb::parallel_for(tbb::blocked_range<int>(0, N, 100), NeuronSimulate(
+		tbb::parallel_for(tbb::blocked_range<int>(0, N, 10), NeuronSimulate(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
 			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, ltp, ltd, Ninp, SpikeTimes, PreSynNeuronSectionBeg,
 			PreSynNeuronSectionEnd, PostSynNeuronSectionBeg,
