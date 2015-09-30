@@ -8,4 +8,4 @@ In order to be able to build this file, It is required that the variable MATLAB_
 
 Also, the library paths of tbb and matlab have to be added to the Path Environment Variable
 
-Check Poisson Rate Implementation: SEM
+Check Poisson Rate Implementation: SEM-Syn-ON-Implement
