@@ -66,19 +66,28 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 		float rand_n;
 		rand_n = dis(gen);
 		if (rand_n < (float)(Iext[j] * 0.001 / onemsbyTstep)){
-			//Vnow[j] = Neurons[j].c; //Vnow is useless in this implementation
+			Vnow[j] = rand_n; //Vnow is useless in this implementation
 			LastSpikedTimeNeuron[j] = time;
+			if (j >= Ninp) LastSpikedTimeNeuron[N - 1] = time; //Inhibitory neuron spike if output neuron spike
 		}
 
 		float eta;
 
 		//For output neurons, update the membrane potential depending on LST of fan-ins
 		if (j >= Ninp && j!=N-1){
-			Vnow[j] = Neurons[j].tmax;
+			Vnow[j] = Neurons[j].tmax-Neurons[j].d;
 			if (PostSynNeuronSectionBeg[j] >= 0){
 				for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
-					if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1 && (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) <= (int)(1000 * onemsbyTstep*Neurons[j].a + 0.5f)){
-						Vnow[j] += Network[AuxArray[k]].Weight;
+					if (Network[AuxArray[k]].NStart != N){
+						if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1 && (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) <= (int)(1000 * onemsbyTstep*Neurons[j].a + 0.5f)){
+							Vnow[j] += Network[AuxArray[k]].Weight;
+						}
+					}
+					else
+					{
+						if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
+							Vnow[j] += Network[AuxArray[k]].Weight*exp(-(float)(time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) / (Neurons[j].b * 1000 * onemsbyTstep));
+						}
 					}
 				}
 			}
@@ -87,14 +96,15 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			//Efficiency
 			
 			if (SpikeTimes[j].size() > 0){
-				eta = 1 / (float)(SpikeTimes[j].size());
+				eta = 1 / (float)(Neurons[j].c+SpikeTimes[j].size());
+				//eta = 1;
 			}
 			else
 			{
 				eta = 0;
 			}
 
-			//Neurons[j].tmax += - eta*0.1;
+			//Neurons[j].tmax += - eta*0.01;
 		}
 
 		//If spike:
@@ -113,11 +123,11 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			if (PostSynNeuronSectionBeg[j] >= 0 && j >= Ninp){
 				int delT, sigma;
 				for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
-					if (Network[AuxArray[k]].Plastic == 1 && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
+					if (Network[AuxArray[k]].Plastic == 1){
 						delT = time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1];
 						//STDP rule
 						sigma = (int)(Neurons[j].a*onemsbyTstep * 1000 + 0.5f);
-						if (delT <= sigma){
+						if (delT <= sigma && LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
 							Network[AuxArray[k]].Weight += eta*(ltp*exp(-Network[AuxArray[k]].Weight) - 1);
 						}
 						else{
@@ -128,10 +138,34 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 						if (Network[AuxArray[k]].Weight < 0){
 							Network[AuxArray[k]].Weight = 0;
 						}
+						if (Network[AuxArray[k]].Weight > log(ltp)){
+							Network[AuxArray[k]].Weight = log(ltp);
+						}
 					}
 				}
 				//tmax (Neuron threshold update): If there is a spike, it increases
-				//Neurons[j].tmax += eta*exp(-Neurons[j].tmax);
+				float eta0;
+				if (SpikeTimes[N-1].size() > 0){
+					eta0 = 1 / (float)(Neurons[j].c+SpikeTimes[N-1].size());
+				}
+				else
+				{
+					eta0 = 0;
+				}
+				if (j != N - 1){
+					for (int lat = Ninp; lat < N - 1; lat++){
+						if (j == lat){
+							Neurons[lat].tmax += eta0*(exp(-Neurons[lat].tmax) - 1);
+						}
+						else {
+							Neurons[lat].tmax -= eta0;
+						}
+
+						//if (Neurons[lat].tmax < 0) Neurons[lat].tmax = 0;
+						//if (Neurons[lat].tmax > log(ltp)) Neurons[lat].tmax = log(ltp);
+					}
+					//Neurons[j].tmax += eta*ltp*exp(-Neurons[j].tmax);
+				}
 			}
 		}		
 		/* //If input neuron, check time has become arrival time from Iext 
@@ -381,7 +415,7 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		if (Vnow[j] == 4*Neurons[j].c){
+		if (Vnow[j] == 10*Neurons[j].c){ //Currently set to 10*c instead of 4*c cuz c=100 and may occur
 			size_t CurrNeuronSectionBeg = PreSynNeuronSectionBeg[j];
 			size_t CurrNeuronSectionEnd = PreSynNeuronSectionEnd[j];
 			if (CurrNeuronSectionBeg >= 0)
