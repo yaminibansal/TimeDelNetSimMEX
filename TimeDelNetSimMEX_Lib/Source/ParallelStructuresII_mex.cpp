@@ -44,10 +44,12 @@ void CurrentUpdate::operator () (const tbb::blocked_range<int*> &BlockedRange) c
 	int *end = BlockedRange.end();
 	for (int * iter = begin; iter < end; ++iter){
 		int CurrentSynapse = *iter;
-		float AddedCurrent = (Network[CurrentSynapse].Weight)*(1 << 17);
-		Iin1[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
-		Iin2[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
-		//LastSpikedTimeSyn[CurrentSynapse] = time;
+		if (LastSpikedTimeSyn[CurrentSynapse] != time){
+			float AddedCurrent = (Network[CurrentSynapse].Weight)*(1 << 17);
+			LastSpikedTimeSyn[CurrentSynapse] = time;
+			Iin1[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
+			Iin2[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
+		}
 	}
 		
 }
@@ -79,7 +81,7 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			if (PostSynNeuronSectionBeg[j] >= 0){
 				for (size_t k = PostSynNeuronSectionBeg[j]; k < PostSynNeuronSectionEnd[j]; ++k){
 					if (Network[AuxArray[k]].NStart != N){
-						if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1 && (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) <= (int)(1000 * onemsbyTstep*Neurons[j].a + 0.5f)){
+						if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1 && (time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) <= (int)(1000 * onemsbyTstep*Neurons[j].a + 0.5f) && time != LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]){
 							Vnow[j] += Network[AuxArray[k]].Weight;
 						}
 					}
