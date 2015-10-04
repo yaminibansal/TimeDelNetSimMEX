@@ -73,7 +73,7 @@ struct NeuronSimulate{
 	MexVector<float> &Iext;
 	MexVector<Neuron> &Neurons;
 	MexVector<Synapse> &Network;
-	int CurrentQueueIndex, QueueSize, onemsbyTstep, time, Ninp;
+	int CurrentQueueIndex, QueueSize, onemsbyTstep, time, Ninp, DelayRange;
 	float StdDev;
 	float I0;
 	float ltp, ltd;
@@ -96,7 +96,7 @@ struct NeuronSimulate{
 		MexVector<Neuron> &Neurons_,
 		MexVector<Synapse> &Network_,
 		int CurrentQueueIndex_, int QueueSize_, int onemsbyTstep_,
-		int time_,
+		int time_, int DelayRange_,
 		float StdDev_,
 		float I0_,
 		float ltp_, float ltd_,
@@ -119,7 +119,7 @@ struct NeuronSimulate{
 		Neurons(Neurons_),
 		Network(Network_),
 		CurrentQueueIndex(CurrentQueueIndex_), QueueSize(QueueSize_), onemsbyTstep(onemsbyTstep_),
-		time(time_),
+		time(time_), DelayRange(DelayRange_),
 		StdDev(StdDev_),
 		I0(I0_),
 		ltp(ltp_), ltd(ltd_),
@@ -145,6 +145,8 @@ struct SpikeRecord{
 	MexVector<size_t> &PreSynNeuronSectionEnd;
 	atomicIntVect &CurrentSpikeLoadingInd;
 	MexVector<MexVector<int> > &SpikeQueue;
+	MexVector<int> &LastSpikedTimeNeuron;
+	int time, DelayRange, onemsbyTstep;
 
 	SpikeRecord(
 		MexVector<float> &Vnow_,
@@ -154,7 +156,9 @@ struct SpikeRecord{
 		MexVector<size_t> &PreSynNeuronSectionBeg_,
 		MexVector<size_t> &PreSynNeuronSectionEnd_,
 		atomicIntVect &CurrentSpikeLoadingInd_,
-		MexVector<MexVector<int> > &SpikeQueue_
+		MexVector<MexVector<int> > &SpikeQueue_,
+		MexVector<int> &LastSpikedTimeNeuron_,
+		int time_, int DelayRange_, int onemsbyTstep_
 		) :
 		Vnow(Vnow_),
 		Network(Network_),
@@ -163,7 +167,9 @@ struct SpikeRecord{
 		PreSynNeuronSectionBeg(PreSynNeuronSectionBeg_),
 		PreSynNeuronSectionEnd(PreSynNeuronSectionEnd_),
 		CurrentSpikeLoadingInd(CurrentSpikeLoadingInd_),
-		SpikeQueue(SpikeQueue_){}
+		SpikeQueue(SpikeQueue_),
+		LastSpikedTimeNeuron(LastSpikedTimeNeuron_),
+		time(time_), DelayRange(DelayRange_), onemsbyTstep(onemsbyTstep_){}
 
 	void operator()(tbb::blocked_range<int> &Range) const;
 };

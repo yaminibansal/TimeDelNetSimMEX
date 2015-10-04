@@ -47,7 +47,7 @@ void CurrentUpdate::operator () (const tbb::blocked_range<int*> &BlockedRange) c
 		float AddedCurrent = (Network[CurrentSynapse].Weight)*(1 << 17);
 		Iin1[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
 		Iin2[Network[CurrentSynapse].NEnd - 1].fetch_and_add((long long)AddedCurrent);
-		LastSpikedTimeSyn[CurrentSynapse] = time;
+		//LastSpikedTimeSyn[CurrentSynapse] = time;
 	}
 		
 }
@@ -112,12 +112,14 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			//Store in SpikeBuffer and SpikeTimes
 			SpikeTimes[j].push_back(time);
 			
-			/*NEW //This part is not required for this implementation as we aren't using the spike buffer
+			//NEW //This part is not required for this implementation as we aren't using the spike buffer
 			if (PreSynNeuronSectionBeg[j] >= 0){
 				for (size_t k = PreSynNeuronSectionBeg[j]; k < PreSynNeuronSectionEnd[j]; ++k){
-					NAdditionalSpikesNow[(CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize].fetch_and_increment();
+					for (int epsp_time = 1; epsp_time <= DelayRange*onemsbyTstep; epsp_time++){
+						NAdditionalSpikesNow[(CurrentQueueIndex + epsp_time) % QueueSize].fetch_and_increment();
+					}
 				}
-			}NEW*/
+			}//NEW*/
 
 			// Causal STDP
 			if (PostSynNeuronSectionBeg[j] >= 0 && j >= Ninp){
@@ -407,22 +409,24 @@ void CurrentAttenuate::operator() (tbb::blocked_range<int> &Range) const {
 	tbb::atomic<long long> *End2 = &Iin2[Range.end() - 1] + 1;
 
 	for (tbb::atomic<long long> *i = Begin1, *j = Begin2; i < End1; ++i, ++j){
-		(*i) = (long long)(float(i->load()) * attenFactor1);
-		(*j) = (long long)(float(j->load()) * attenFactor2);
+		(*i) = 0; // (long long)(float(i->load()) * attenFactor1);
+		(*j) = 0; // (long long)(float(j->load()) * attenFactor2);
 	}
 }
 void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 	int RangeBeg = Range.begin();
 	int RangeEnd = Range.end();
 	for (int j = RangeBeg; j < RangeEnd; ++j){
-		if (Vnow[j] == 10*Neurons[j].c){ //Currently set to 10*c instead of 4*c cuz c=100 and may occur
+		if (LastSpikedTimeNeuron[j]==time){ 
 			size_t CurrNeuronSectionBeg = PreSynNeuronSectionBeg[j];
 			size_t CurrNeuronSectionEnd = PreSynNeuronSectionEnd[j];
 			if (CurrNeuronSectionBeg >= 0)
 				for (size_t k = CurrNeuronSectionBeg; k < CurrNeuronSectionEnd; ++k){
-					int ThisQueue = (CurrentQueueIndex + Network[k].DelayinTsteps) % QueueSize;
-					int ThisLoadingInd = CurrentSpikeLoadingInd[ThisQueue].fetch_and_increment();
-					SpikeQueue[ThisQueue][ThisLoadingInd] = k;
+					for (int epsp_time = 1; epsp_time <= DelayRange*onemsbyTstep; epsp_time++){
+						int ThisQueue = (CurrentQueueIndex + epsp_time) % QueueSize;
+						int ThisLoadingInd = CurrentSpikeLoadingInd[ThisQueue].fetch_and_increment();
+						SpikeQueue[ThisQueue][ThisLoadingInd] = k;
+					}
 				}
 		}
 	}
@@ -976,7 +980,7 @@ void SimulateParallel(
 		// Calculation of V,U[t] from V,U[t-1], Iin = Itemp
 		tbb::parallel_for(tbb::blocked_range<int>(0, N, 10), NeuronSimulate(
 			Vnow, Unow, Iin1, Iin2, Irand, Iext, Neurons, Network,
-			CurrentQueueIndex, QueueSize, onemsbyTstep, time, StdDev, I0, ltp, ltd, Ninp, SpikeTimes, PreSynNeuronSectionBeg,
+			CurrentQueueIndex, QueueSize, onemsbyTstep, time, DelayRange, StdDev, I0, ltp, ltd, Ninp, SpikeTimes, PreSynNeuronSectionBeg,
 			PreSynNeuronSectionEnd, PostSynNeuronSectionBeg,
 			PostSynNeuronSectionEnd, AuxArray, NAdditionalSpikesNow, LastSpikedTimeNeuron), apNeuronSim);
 
@@ -995,7 +999,9 @@ void SimulateParallel(
 				PreSynNeuronSectionBeg,
 				PreSynNeuronSectionEnd,
 				CurrentSpikeLoadingInd,
-				SpikeQueue
+				SpikeQueue,
+				LastSpikedTimeNeuron,
+				time, DelayRange, onemsbyTstep
 			));
 
 		for (int k = 0; k < QueueSize; ++k) NAdditionalSpikesNow[k] = 0;
