@@ -146,7 +146,7 @@ struct SpikeRecord{
 	atomicIntVect &CurrentSpikeLoadingInd;
 	MexVector<MexVector<int> > &SpikeQueue;
 	MexVector<int> &LastSpikedTimeNeuron;
-	int time, DelayRange, onemsbyTstep;
+	int time, DelayRange, onemsbyTstep, N;
 
 	SpikeRecord(
 		MexVector<float> &Vnow_,
@@ -158,7 +158,7 @@ struct SpikeRecord{
 		atomicIntVect &CurrentSpikeLoadingInd_,
 		MexVector<MexVector<int> > &SpikeQueue_,
 		MexVector<int> &LastSpikedTimeNeuron_,
-		int time_, int DelayRange_, int onemsbyTstep_
+		int time_, int DelayRange_, int onemsbyTstep_, int N_
 		) :
 		Vnow(Vnow_),
 		Network(Network_),
@@ -169,7 +169,7 @@ struct SpikeRecord{
 		CurrentSpikeLoadingInd(CurrentSpikeLoadingInd_),
 		SpikeQueue(SpikeQueue_),
 		LastSpikedTimeNeuron(LastSpikedTimeNeuron_),
-		time(time_), DelayRange(DelayRange_), onemsbyTstep(onemsbyTstep_){}
+		time(time_), DelayRange(DelayRange_), onemsbyTstep(onemsbyTstep_), N(N_){}
 
 	void operator()(tbb::blocked_range<int> &Range) const;
 };
