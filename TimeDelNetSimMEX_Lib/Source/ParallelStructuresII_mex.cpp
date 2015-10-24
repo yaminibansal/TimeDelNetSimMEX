@@ -70,6 +70,9 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 			LastSpikedTimeNeuron[j] = time;
 			if (j >= Ninp) LastSpikedTimeNeuron[N - 1] = time; //Inhibitory neuron spike if output neuron spike
 		}
+	}
+
+	for (int j = RangeBeg; j < RangeEnd; ++j){
 
 		float eta;
 
@@ -86,12 +89,21 @@ void NeuronSimulate::operator() (tbb::blocked_range<int> &Range) const{
 					else
 					{
 						if (LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1] != -1){
+							float check = Network[AuxArray[k]].Weight*exp(-(float)(time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) / (Neurons[j].b * 1000 * onemsbyTstep));
 							Vnow[j] += Network[AuxArray[k]].Weight*exp(-(float)(time - LastSpikedTimeNeuron[Network[AuxArray[k]].NStart - 1]) / (Neurons[j].b * 1000 * onemsbyTstep));
 						}
 					}
 				}
 			}
-			Iext[j] = exp(Vnow[j]);
+			//Iext[j] = exp(Vnow[j]);
+
+			if (Vnow[j] > 0){
+				Iext[j] = 1000;
+			}
+			else
+			{
+				Iext[j] = 0;
+			}
 			//tmax (Neuron threshold update): Threshold decreases uniformly at all times
 			//Efficiency
 			
@@ -427,16 +439,16 @@ void SpikeRecord::operator()(tbb::blocked_range<int> &Range) const{
 		}
 	}
 }
-void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &Iext, MexVector<int> &IextPtr)
+void InputArgs::IExtFunc(int time, MexMatrix<float> &InpCurr, MexVector<float> &Iext, MexVector<int> &IextPtr, int onemsbyTstep, int NoOfms)
 {
 	// patTime = Time for 1 datapoint
 	// patONTime = patTime - margin time (10 ms cuz order of membrane potential time const)
-	int patTime = 50, patONTime = 40;
-	int currPat = time / patTime;
+	int patTime = 50*onemsbyTstep, patONTime = 40*onemsbyTstep;
+	int currPat = (time % (NoOfms*onemsbyTstep)) / patTime;
 	int Ninp = InpCurr.ncols();
 	for (int i = 0; i < Ninp; ++i){
 		//if (InpCurr(IextPtr[i], i) == time){
-		if (time % patTime < patONTime){
+		if ((time % (NoOfms*onemsbyTstep)) % patTime < patONTime){
 			Iext[i] = InpCurr(currPat, i);
 		}
 		else{
@@ -943,7 +955,7 @@ void SimulateParallel(
 	for (i = 1; i<=nSteps; ++i){
 		
 		time = time + 1;
-		InputArgs::IExtFunc(time, InpCurr, Iext, IextPtr);
+		InputArgs::IExtFunc(time, InpCurr, Iext, IextPtr, onemsbyTstep, NoOfms);
 		Irand.generate();
 
 		// This iteration applies time update equation for internal current

@@ -197,7 +197,7 @@ struct OutputVarsStruct;
 
 
 struct InputArgs{
-	static void IExtFunc(int, MexMatrix<float> &, MexVector<float> &, MexVector<int> &);
+	static void IExtFunc(int, MexMatrix<float> &, MexVector<float> &, MexVector<int> &, int, int);
 	MexVector<Synapse> Network;
 	MexVector<Neuron> Neurons;
 	MexMatrix<float> InpCurr;
